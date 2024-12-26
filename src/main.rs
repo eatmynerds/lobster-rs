@@ -13,6 +13,7 @@ mod cli;
 use cli::get_input;
 mod flixhq;
 use flixhq::{search::FlixHQInfo, FlixHQ};
+mod utils;
 
 pub static BASE_URL: &'static str = "https://flixhq.to";
 
