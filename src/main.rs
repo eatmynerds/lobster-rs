@@ -5,6 +5,7 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::fmt::{Display, Formatter};
+use std::io::Write;
 use std::num::ParseIntError;
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -14,6 +15,7 @@ use cli::get_input;
 mod flixhq;
 use flixhq::{search::FlixHQInfo, FlixHQ};
 mod utils;
+use utils::fzf::{Fzf, FzfArgs, FzfSpawn};
 
 pub static BASE_URL: &'static str = "https://flixhq.to";
 
@@ -224,17 +226,30 @@ async fn main() -> anyhow::Result<()> {
     for result in results {
         match result {
             FlixHQInfo::Movie(movie) => search_results.push(format!(
-                "{} {} {} {} [{}]",
+                "{}\t{}\t{}\t{} [{}]",
                 movie.image, movie.id, movie.media_type, movie.title, movie.year
             )),
             FlixHQInfo::Tv(tv) => search_results.push(format!(
-                "{} {} {} {} [{}] [SZNS {}] [EPS {}]",
+                "{}\t{}\t{}\t{} [{}] [SZNS {}] [EPS {}]",
                 tv.image, tv.id, tv.media_type, tv.title, tv.year, tv.seasons, tv.episodes
             )),
         }
     }
 
-    println!("{:?}", search_results);
+    let mut fzf = Fzf::new();
+
+    let output = fzf
+        .spawn(FzfArgs {
+            print_query: Some(search_results.join("\n")),
+            reverse: true,
+            with_nth: Some("4,5,6,7,8".to_string()),
+            delimiter: Some("\t".to_string()),
+            header: Some("Choose a movie or TV show".to_string()),
+            ..Default::default()
+        })
+        .unwrap();
+
+    println!("fzf output: {:?}", String::from_utf8_lossy(&output.stdout));
 
     Ok(())
 }

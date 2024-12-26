@@ -1,7 +1,8 @@
 use std::{
     error::Error,
     fmt::{Display, Formatter},
-    io::Write,
+    io::{Read, Write},
+    process::Stdio,
 };
 
 #[derive(Debug)]
@@ -29,7 +30,7 @@ pub struct FzfArgs {
     pub header: Option<String>,
     pub reverse: bool,
     pub preview: Option<String>,
-    pub with_nth: Option<usize>,
+    pub with_nth: Option<String>,
     pub ignore_case: bool,
     pub query: Option<String>,
     pub cycle: bool,
@@ -38,6 +39,7 @@ pub struct FzfArgs {
 }
 
 impl Error for SpawnError {}
+
 impl Display for SpawnError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.write_str(format!("{:?}", self).as_str())
@@ -45,11 +47,11 @@ impl Display for SpawnError {
 }
 
 pub trait FzfSpawn {
-    fn spawn(&mut self, args: FzfArgs) -> Result<std::process::Child, SpawnError>;
+    fn spawn(&mut self, args: FzfArgs) -> Result<std::process::Output, SpawnError>;
 }
 
 impl FzfSpawn for Fzf {
-    fn spawn(&mut self, args: FzfArgs) -> Result<std::process::Child, SpawnError> {
+    fn spawn(&mut self, args: FzfArgs) -> Result<std::process::Output, SpawnError> {
         let mut temp_args = self.args.clone();
 
         if let Some(header) = args.header {
@@ -92,16 +94,31 @@ impl FzfSpawn for Fzf {
         command.args(&temp_args);
 
         if let Some(print_query) = args.print_query {
-            command.stdin(std::process::Stdio::piped());
+            command
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped());
+
             let mut child = command.spawn().map_err(SpawnError::IOError)?;
 
-            if let Some(stdin) = child.stdin.as_mut() {
+            if let Some(mut stdin) = child.stdin.take() {
                 writeln!(stdin, "{}", print_query).map_err(SpawnError::IOError)?;
             }
 
-            Ok(child)
+            let output = child.wait_with_output().map_err(SpawnError::IOError)?;
+
+            Ok(output)
         } else {
-            command.spawn().map_err(SpawnError::IOError)
+            command
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped());
+
+            let mut child = command.spawn().map_err(SpawnError::IOError)?;
+
+            let output = child.wait_with_output().map_err(SpawnError::IOError)?;
+
+            Ok(output)
         }
     }
 }
@@ -119,13 +136,8 @@ mod test {
         };
 
         let mut fzf = Fzf::new();
-        let mut child = fzf.spawn(args).unwrap();
-        assert_eq!(
-            child
-                .wait()
-                .expect("Failed to spawn child process for fzf")
-                .code(),
-            Some(0)
-        )
+        let output = fzf.spawn(args).unwrap();
+
+        assert_eq!(output.status.success(), true);
     }
 }
