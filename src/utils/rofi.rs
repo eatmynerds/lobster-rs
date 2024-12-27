@@ -1,4 +1,5 @@
 use super::SpawnError;
+use std::io::Write;
 
 pub struct Rofi {
     pub executable: String,
@@ -16,6 +17,7 @@ impl Rofi {
 
 #[derive(Default)]
 pub struct RofiArgs {
+    process_stdin: Option<String>,
     mesg: Option<String>,
     filter: Option<String>,
     sort: bool,
@@ -100,10 +102,32 @@ impl RofiSpawn for Rofi {
             temp_args.push(mesg);
         }
 
-        std::process::Command::new(&self.executable)
-            .args(temp_args)
-            .spawn()
-            .map_err(SpawnError::IOError)
+        let mut command = std::process::Command::new(&self.executable);
+        command.args(&temp_args);
+
+        if let Some(process_stdin) = args.process_stdin {
+            command
+                .stdin(std::process::Stdio::piped())
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped());
+
+            let mut child = command.spawn().map_err(SpawnError::IOError)?;
+
+            if let Some(mut stdin) = child.stdin.take() {
+                writeln!(stdin, "{}", process_stdin).map_err(SpawnError::IOError)?;
+            }
+
+            Ok(child)
+        } else {
+            command
+                .stdin(std::process::Stdio::piped())
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped());
+
+            let child = command.spawn().map_err(SpawnError::IOError)?;
+
+            Ok(child)
+        }
     }
 }
 
@@ -113,22 +137,22 @@ mod test {
 
     #[test]
     fn test_rofi_spawn() {
-        let args = RofiArgs {
-            sort: true,
-            dmenu: true,
-            case_sensitive: true,
-            entry_prompt: Some("".to_string()),
-            mesg: Some("Hello\nWorld!".to_string()),
-            ..Default::default()
-        };
-
         let mut rofi = Rofi::new();
-        let mut child = rofi.spawn(args).unwrap();
+        let mut child = rofi
+            .spawn(RofiArgs {
+                process_stdin: Some("Hello\nWorld!".to_string()),
+                sort: true,
+                dmenu: true,
+                case_sensitive: true,
+                entry_prompt: Some("".to_string()),
+                ..Default::default()
+            })
+            .unwrap();
 
         assert_eq!(
             child
                 .wait()
-                .expect("Failed to spawn child process for mpv.")
+                .expect("Failed to spawn child process for rofi.")
                 .code(),
             Some(0)
         )

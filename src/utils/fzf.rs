@@ -22,7 +22,7 @@ impl Fzf {
 
 #[derive(Default)]
 pub struct FzfArgs {
-    pub print_query: Option<String>,
+    pub process_stdin: Option<String>,
     pub header: Option<String>,
     pub reverse: bool,
     pub preview: Option<String>,
@@ -81,7 +81,7 @@ impl FzfSpawn for Fzf {
         let mut command = std::process::Command::new(&self.executable);
         command.args(&temp_args);
 
-        if let Some(print_query) = args.print_query {
+        if let Some(process_stdin) = args.process_stdin {
             command
                 .stdin(Stdio::piped())
                 .stdout(Stdio::piped())
@@ -90,7 +90,7 @@ impl FzfSpawn for Fzf {
             let mut child = command.spawn().map_err(SpawnError::IOError)?;
 
             if let Some(mut stdin) = child.stdin.take() {
-                writeln!(stdin, "{}", print_query).map_err(SpawnError::IOError)?;
+                writeln!(stdin, "{}", process_stdin).map_err(SpawnError::IOError)?;
             }
 
             let output = child.wait_with_output().map_err(SpawnError::IOError)?;
@@ -118,7 +118,7 @@ mod test {
     #[test]
     fn test_fzf_spawn() {
         let args = FzfArgs {
-            print_query: Some("Hello\nWorld".to_string()),
+            process_stdin: Some("Hello\nWorld".to_string()),
             delimiter: Some(String::from("\t")),
             ..Default::default()
         };

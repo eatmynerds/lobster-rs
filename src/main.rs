@@ -3,12 +3,14 @@ use clap::{Parser, ValueEnum};
 use lazy_static::lazy_static;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use std::fmt;
-use std::fmt::{Display, Formatter};
-use std::io::Write;
-use std::num::ParseIntError;
-use std::path::PathBuf;
-use std::str::FromStr;
+use std::{
+    fmt,
+    fmt::{Display, Formatter},
+    io::Write,
+    num::ParseIntError,
+    path::PathBuf,
+    str::FromStr,
+};
 
 mod cli;
 use cli::get_input;
@@ -236,20 +238,23 @@ async fn main() -> anyhow::Result<()> {
         }
     }
 
-    let mut fzf = Fzf::new();
+    if args.rofi {
+    } else {
+        let mut fzf = Fzf::new();
 
-    let output = fzf
-        .spawn(FzfArgs {
-            print_query: Some(search_results.join("\n")),
-            reverse: true,
-            with_nth: Some("4,5,6,7,8".to_string()),
-            delimiter: Some("\t".to_string()),
-            header: Some("Choose a movie or TV show".to_string()),
-            ..Default::default()
-        })
-        .unwrap();
+        let output = fzf
+            .spawn(FzfArgs {
+                process_stdin: Some(search_results.join("\n")),
+                reverse: true,
+                with_nth: Some("4,5,6,7,8".to_string()),
+                delimiter: Some("\t".to_string()),
+                header: Some("Choose a movie or TV show".to_string()),
+                ..Default::default()
+            })
+            .unwrap();
 
-    println!("fzf output: {:?}", String::from_utf8_lossy(&output.stdout));
+        println!("fzf output: {:?}", String::from_utf8_lossy(&output.stdout));
+    }
 
     Ok(())
 }
