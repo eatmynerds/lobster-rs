@@ -1,5 +1,5 @@
 use super::{
-    search::{FlixHQEpisode, FlixHQResult},
+    search::{FlixHQEpisode, FlixHQInfo, FlixHQMovie, FlixHQResult, FlixHQShow},
     FlixHQ,
 };
 use crate::{MediaType, BASE_URL};
@@ -11,23 +11,67 @@ fn create_html_fragment(html: &str) -> Elements<'_> {
 }
 
 pub(super) trait FlixHQHTML {
-    fn parse_search(&self, html: &str) -> Vec<Option<String>>;
-    fn single_page(&self, media_html: String, id: &str) -> FlixHQResult;
-    fn info_season(&self, season_html: String) -> Vec<String>;
-    fn info_episode(&self, episode_html: String) -> Vec<FlixHQEpisode>;
+    fn parse_search(&self, html: &str) -> Vec<FlixHQInfo>;
+    fn single_page(&self, html: &str, id: &str) -> FlixHQResult;
+    fn season_info(&self, html: &str) -> Vec<String>;
+    fn episode_info(&self, html: &str) -> Vec<FlixHQEpisode>;
 }
 
 impl FlixHQHTML for FlixHQ {
-    fn parse_search(&self, html: &str) -> Vec<Option<String>> {
+    fn parse_search(&self, html: &str) -> Vec<FlixHQInfo> {
         let page_parser = Page::new(html);
 
-        page_parser.page_ids()
+        let mut results: Vec<FlixHQInfo> = vec![];
+
+        let ids = page_parser.page_ids();
+        let images = page_parser.page_images();
+        let titles = page_parser.page_titles();
+        let release_dates = page_parser.page_release_dates();
+        let episodes = page_parser.page_episodes();
+
+        for ((((id, image), title), release_date), episode) in ids
+            .into_iter()
+            .zip(images)
+            .zip(titles)
+            .zip(release_dates)
+            .zip(episodes)
+        {
+            let media_type = page_parser.media_type(&id);
+
+            match media_type {
+                Some(MediaType::Tv) => {
+                    results.push(FlixHQInfo::Tv(FlixHQShow {
+                        id,
+                        title,
+                        image,
+                        seasons: release_date.replace("SS ", "").parse().unwrap_or(0),
+                        episodes: episode.replace("EPS ", "").parse().unwrap_or(0),
+                        media_type: MediaType::Tv,
+                    }));
+                }
+                Some(MediaType::Movie) => {
+                    results.push(FlixHQInfo::Movie(FlixHQMovie {
+                        id,
+                        title,
+                        year: release_date,
+                        image,
+                        duration: episode,
+                        media_type: MediaType::Movie,
+                    }));
+                }
+                None => continue,
+            }
+        }
+
+        results
     }
 
-    fn single_page(&self, media_html: String, id: &str) -> FlixHQResult {
-        let elements = create_html_fragment(&media_html);
+    fn single_page(&self, html: &str, id: &str) -> FlixHQResult {
+        let elements = create_html_fragment(html);
 
-        let search_parser = Search::new(&elements, id);
+        let page_parser = Page::new(html);
+
+        let search_parser = Search::new(&elements);
 
         let info_parser = Info::new(&elements);
 
@@ -36,15 +80,16 @@ impl FlixHQHTML for FlixHQ {
             image: search_parser.image(),
 
             year: info_parser.label(3, "Released:").join(""),
-            media_type: search_parser.media_type(),
+            duration: info_parser.duration(),
+            media_type: page_parser.media_type(&id),
             id: id.to_string(),
         }
     }
 
-    fn info_season(&self, season_html: String) -> Vec<String> {
-        let elements = create_html_fragment(&season_html);
+    fn season_info(&self, html: &str) -> Vec<String> {
+        let elements = create_html_fragment(html);
 
-        let season_parser = Seasons::new(elements);
+        let season_parser = Season::new(elements);
 
         season_parser
             .season_results()
@@ -53,10 +98,10 @@ impl FlixHQHTML for FlixHQ {
             .collect()
     }
 
-    fn info_episode(&self, episode_html: String) -> Vec<FlixHQEpisode> {
-        let elements = create_html_fragment(&episode_html);
+    fn episode_info(&self, html: &str) -> Vec<FlixHQEpisode> {
+        let elements = create_html_fragment(html);
 
-        let episode_parser = Episodes::new(elements);
+        let episode_parser = Episode::new(elements);
 
         episode_parser.episode_results()
     }
@@ -72,26 +117,75 @@ impl<'a> Page<'a> {
         Self { elements }
     }
 
-    fn page_ids(&self) -> Vec<Option<String>> {
-        self.elements.find("div.film-poster > a").map(|_, element| {
-            element
-                .get_attribute("href")?
-                .to_string()
-                .strip_prefix('/')
-                .map(String::from)
-        })
+    fn page_ids(&self) -> Vec<String> {
+        self.elements
+            .find("div.film-poster > a")
+            .into_iter()
+            .filter_map(|element| {
+                element
+                    .get_attribute("href")
+                    .and_then(|href| href.to_string().strip_prefix('/').map(String::from))
+            })
+            .collect()
+    }
+
+    fn page_images(&self) -> Vec<String> {
+        self.elements
+            .find("div.film-poster > img")
+            .into_iter()
+            .filter_map(|element| {
+                element
+                    .get_attribute("data-src")
+                    .map(|value| value.to_string())
+            })
+            .collect()
+    }
+
+    fn page_titles(&self) -> Vec<String> {
+        self.elements
+            .find("div.film-detail > h2.film-name > a")
+            .into_iter()
+            .filter_map(|element| {
+                element
+                    .get_attribute("title")
+                    .map(|value| value.to_string())
+            })
+            .collect()
+    }
+
+    fn page_release_dates(&self) -> Vec<String> {
+        self.elements
+            .find("div.fd-infor > span:nth-child(1)")
+            .into_iter()
+            .map(|element| element.text())
+            .collect()
+    }
+
+    fn page_episodes(&self) -> Vec<String> {
+        self.elements
+            .find("div.fd-infor > span:nth-child(3)")
+            .into_iter()
+            .map(|element| element.text())
+            .collect()
+    }
+
+    fn media_type(&self, id: &str) -> Option<MediaType> {
+        match id.split('/').next() {
+            Some("tv") => Some(MediaType::Tv),
+            Some("movie") => Some(MediaType::Movie),
+            _ => None,
+        }
     }
 }
 
 #[derive(Clone, Copy)]
 struct Search<'page, 'b> {
     elements: &'b Elements<'page>,
-    id: &'b str,
 }
 
 impl<'page, 'b> Search<'page, 'b> {
-    fn new(elements: &'b Elements<'page>, id: &'b str) -> Self {
-        Self { elements, id }
+    fn new(elements: &'b Elements<'page>) -> Self {
+        Self { elements }
     }
 
     fn image(&self) -> String {
@@ -115,14 +209,6 @@ impl<'page, 'b> Search<'page, 'b> {
         .text()
         .trim()
         .to_owned()
-    }
-
-    fn media_type(&self) -> Option<MediaType> {
-        match self.id.split('/').next() {
-            Some("tv") => Some(MediaType::Tv),
-            Some("movie") => Some(MediaType::Movie),
-            _ => None,
-        }
     }
 }
 
@@ -150,13 +236,21 @@ impl<'page, 'b> Info<'page, 'b> {
             .filter(|x| !x.is_empty())
             .collect()
     }
+
+    pub fn duration(&self) -> String {
+        self.elements
+            .find("span.item:nth-child(3)")
+            .text()
+            .trim()
+            .to_owned()
+    }
 }
 
-struct Seasons<'a> {
+struct Season<'a> {
     elements: Elements<'a>,
 }
 
-impl<'a> Seasons<'a> {
+impl<'a> Season<'a> {
     fn new(elements: Elements<'a>) -> Self {
         Self { elements }
     }
@@ -170,11 +264,11 @@ impl<'a> Seasons<'a> {
     }
 }
 
-struct Episodes<'a> {
+struct Episode<'a> {
     elements: Elements<'a>,
 }
 
-impl<'a> Episodes<'a> {
+impl<'a> Episode<'a> {
     fn new(elements: Elements<'a>) -> Self {
         Self { elements }
     }

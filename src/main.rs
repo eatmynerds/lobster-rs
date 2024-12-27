@@ -17,7 +17,11 @@ use cli::get_input;
 mod flixhq;
 use flixhq::{search::FlixHQInfo, FlixHQ};
 mod utils;
-use utils::fzf::{Fzf, FzfArgs, FzfSpawn};
+use utils::{
+    fzf::{Fzf, FzfArgs, FzfSpawn},
+    rofi::{Rofi, RofiArgs, RofiSpawn},
+    ProcessArgs,
+};
 
 pub static BASE_URL: &'static str = "https://flixhq.to";
 
@@ -208,13 +212,36 @@ impl fmt::Display for Args {
     }
 }
 
+fn fzf_launcher(args: FzfArgs) -> String {
+    let mut fzf = Fzf::new();
+
+    let output = fzf.spawn(args).unwrap();
+
+    String::from_utf8_lossy(&output.stdout).trim().to_string()
+}
+
+fn rofi_launcher(args: RofiArgs) -> String {
+    let mut rofi = Rofi::new();
+
+    let output = rofi.spawn(args).unwrap();
+
+    String::from_utf8_lossy(&output.stdout).trim().to_string()
+}
+
+fn launcher(args: ProcessArgs) -> String {
+    match args {
+        ProcessArgs::Fzf(fzf_args) => fzf_launcher(fzf_args),
+        ProcessArgs::Rofi(rofi_args) => rofi_launcher(rofi_args),
+    }
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let args = Args::parse();
 
     let query = match args.query {
         Some(query) => query,
-        None => get_input()?,
+        None => get_input(args.rofi)?,
     };
 
     let results = FlixHQ.search(&query).await?;
@@ -228,32 +255,75 @@ async fn main() -> anyhow::Result<()> {
     for result in results {
         match result {
             FlixHQInfo::Movie(movie) => search_results.push(format!(
-                "{}\t{}\t{}\t{} [{}]",
-                movie.image, movie.id, movie.media_type, movie.title, movie.year
+                "{}\t{}\t{}\t{} [{}] [{}]",
+                movie.image, movie.id, movie.media_type, movie.title, movie.year, movie.duration
             )),
             FlixHQInfo::Tv(tv) => search_results.push(format!(
-                "{}\t{}\t{}\t{} [{}] [SZNS {}] [EPS {}]",
-                tv.image, tv.id, tv.media_type, tv.title, tv.year, tv.seasons, tv.episodes
+                "{}\t{}\t{}\t{} [SZNS {}] [EPS {}]",
+                tv.image, tv.id, tv.media_type, tv.title, tv.seasons, tv.episodes
             )),
         }
     }
 
-    if args.rofi {
+    let media_choice = if args.rofi {
+        launcher(ProcessArgs::Rofi(RofiArgs {
+            process_stdin: Some(search_results.join("\n")),
+            mesg: Some("Choose a movie or TV show".to_string()),
+            dmenu: true,
+            case_sensitive: true,
+            entry_prompt: Some("".to_string()),
+            display_columns: Some(4),
+            ..Default::default()
+        }))
     } else {
-        let mut fzf = Fzf::new();
+        launcher(ProcessArgs::Fzf(FzfArgs {
+            process_stdin: Some(search_results.join("\n")),
+            reverse: true,
+            with_nth: Some("4,5,6,7,8".to_string()),
+            delimiter: Some("\t".to_string()),
+            header: Some("Choose a movie or TV show".to_string()),
+            ..Default::default()
+        }))
+    };
 
-        let output = fzf
-            .spawn(FzfArgs {
-                process_stdin: Some(search_results.join("\n")),
-                reverse: true,
-                with_nth: Some("4,5,6,7,8".to_string()),
-                delimiter: Some("\t".to_string()),
-                header: Some("Choose a movie or TV show".to_string()),
-                ..Default::default()
-            })
-            .unwrap();
+    let media_info = media_choice.split("\t").collect::<Vec<&str>>();
 
-        println!("fzf output: {:?}", String::from_utf8_lossy(&output.stdout));
+    let image_link = media_info[0];
+    let media_id = media_info[1];
+    let media_type = media_info[2];
+    let media_title = media_info[3].split('[').next().unwrap_or("").trim();
+
+    if media_type == "tv" {
+        let show_info = FlixHQ.info(&media_id).await?;
+
+        if let FlixHQInfo::Tv(tv) = show_info {
+            let mut seasons: Vec<String> = vec![];
+
+            for season in 0..tv.seasons {
+                seasons.push(format!("Season {}", season + 1))
+            }
+
+            let season_choice = if args.rofi {
+                launcher(ProcessArgs::Rofi(RofiArgs {
+                    process_stdin: Some(seasons.join("\n")),
+                    mesg: Some("Choose a season".to_string()),
+                    dmenu: true,
+                    case_sensitive: true,
+                    entry_prompt: Some("".to_string()),
+                    ..Default::default()
+                }))
+            } else {
+                launcher(ProcessArgs::Fzf(FzfArgs {
+                    process_stdin: Some(seasons.join("\n")),
+                    reverse: true,
+                    delimiter: Some("\t".to_string()),
+                    header: Some("Choose a season".to_string()),
+                    ..Default::default()
+                }))
+            };
+
+            println!("Selected season: {}", season_choice);
+        }
     }
 
     Ok(())

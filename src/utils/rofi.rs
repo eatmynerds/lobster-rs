@@ -17,28 +17,28 @@ impl Rofi {
 
 #[derive(Default)]
 pub struct RofiArgs {
-    process_stdin: Option<String>,
-    mesg: Option<String>,
-    filter: Option<String>,
-    sort: bool,
-    show_icons: bool,
-    show: Option<String>,
-    drun_categories: Option<String>,
-    theme: Option<String>,
-    dmenu: bool,
-    case_sensitive: bool,
-    width: Option<u32>,
-    left_display_prompt: Option<String>,
-    entry_prompt: Option<String>,
-    display_columns: Option<u32>,
+    pub process_stdin: Option<String>,
+    pub mesg: Option<String>,
+    pub filter: Option<String>,
+    pub sort: bool,
+    pub show_icons: bool,
+    pub show: Option<String>,
+    pub drun_categories: Option<String>,
+    pub theme: Option<String>,
+    pub dmenu: bool,
+    pub case_sensitive: bool,
+    pub width: Option<u32>,
+    pub left_display_prompt: Option<String>,
+    pub entry_prompt: Option<String>,
+    pub display_columns: Option<u32>,
 }
 
 pub trait RofiSpawn {
-    fn spawn(&mut self, args: RofiArgs) -> Result<std::process::Child, SpawnError>;
+    fn spawn(&mut self, args: RofiArgs) -> Result<std::process::Output, SpawnError>;
 }
 
 impl RofiSpawn for Rofi {
-    fn spawn(&mut self, args: RofiArgs) -> Result<std::process::Child, SpawnError> {
+    fn spawn(&mut self, args: RofiArgs) -> Result<std::process::Output, SpawnError> {
         let mut temp_args = self.args.clone();
 
         if let Some(filter) = args.filter {
@@ -117,7 +117,9 @@ impl RofiSpawn for Rofi {
                 writeln!(stdin, "{}", process_stdin).map_err(SpawnError::IOError)?;
             }
 
-            Ok(child)
+            let output = child.wait_with_output().map_err(SpawnError::IOError)?;
+
+            Ok(output)
         } else {
             command
                 .stdin(std::process::Stdio::piped())
@@ -126,7 +128,9 @@ impl RofiSpawn for Rofi {
 
             let child = command.spawn().map_err(SpawnError::IOError)?;
 
-            Ok(child)
+            let output = child.wait_with_output().map_err(SpawnError::IOError)?;
+
+            Ok(output)
         }
     }
 }
@@ -138,7 +142,7 @@ mod test {
     #[test]
     fn test_rofi_spawn() {
         let mut rofi = Rofi::new();
-        let mut child = rofi
+        let output = rofi
             .spawn(RofiArgs {
                 process_stdin: Some("Hello\nWorld!".to_string()),
                 sort: true,
@@ -149,12 +153,6 @@ mod test {
             })
             .unwrap();
 
-        assert_eq!(
-            child
-                .wait()
-                .expect("Failed to spawn child process for rofi.")
-                .code(),
-            Some(0)
-        )
+        assert_eq!(output.status.success(), true);
     }
 }

@@ -3,6 +3,11 @@ pub mod rofi;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 
+pub enum ProcessArgs {
+    Fzf(fzf::FzfArgs),
+    Rofi(rofi::RofiArgs),
+}
+
 #[derive(Debug)]
 pub enum SpawnError {
     IOError(std::io::Error),

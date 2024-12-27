@@ -117,14 +117,14 @@ mod test {
 
     #[test]
     fn test_fzf_spawn() {
-        let args = FzfArgs {
-            process_stdin: Some("Hello\nWorld".to_string()),
-            delimiter: Some(String::from("\t")),
-            ..Default::default()
-        };
-
         let mut fzf = Fzf::new();
-        let output = fzf.spawn(args).unwrap();
+        let output = fzf
+            .spawn(FzfArgs {
+                process_stdin: Some("Hello\nWorld".to_string()),
+                delimiter: Some(String::from("\t")),
+                ..Default::default()
+            })
+            .unwrap();
 
         assert_eq!(output.status.success(), true);
     }
