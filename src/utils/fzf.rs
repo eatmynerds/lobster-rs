@@ -1,14 +1,10 @@
+use super::SpawnError;
 use std::{
     error::Error,
     fmt::{Display, Formatter},
     io::{Read, Write},
     process::Stdio,
 };
-
-#[derive(Debug)]
-pub enum SpawnError {
-    IOError(std::io::Error),
-}
 
 pub struct Fzf {
     pub executable: String,
@@ -36,14 +32,6 @@ pub struct FzfArgs {
     pub cycle: bool,
     pub delimiter: Option<String>,
     pub preview_window: Option<String>,
-}
-
-impl Error for SpawnError {}
-
-impl Display for SpawnError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.write_str(format!("{:?}", self).as_str())
-    }
 }
 
 pub trait FzfSpawn {
