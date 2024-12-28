@@ -1,6 +1,8 @@
 pub mod config;
 pub mod fzf;
+pub mod mpv;
 pub mod rofi;
+
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 

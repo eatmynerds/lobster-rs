@@ -19,6 +19,7 @@ mod utils;
 use utils::{
     config::Config,
     fzf::{Fzf, FzfArgs, FzfSpawn},
+    mpv::{Mpv, MpvArgs, MpvPlay},
     rofi::{Rofi, RofiArgs, RofiSpawn},
 };
 
@@ -410,8 +411,6 @@ async fn main() -> anyhow::Result<()> {
                 .unwrap_or(&Provider::Vidcloud);
 
             let sources = FlixHQ.sources(episode_id, media_id, *server).await?;
-
-            println!("{:#?}", sources);
         }
     }
 
