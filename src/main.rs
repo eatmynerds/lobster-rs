@@ -6,21 +6,20 @@ use serde::{Deserialize, Serialize};
 use std::{
     fmt,
     fmt::{Display, Formatter},
-    io::Write,
     num::ParseIntError,
-    path::PathBuf,
     str::FromStr,
 };
 
 mod cli;
 use cli::get_input;
 mod flixhq;
-use flixhq::{search::FlixHQInfo, FlixHQ};
+use flixhq::flixhq::{FlixHQ, FlixHQInfo};
+mod providers;
 mod utils;
 use utils::{
+    config::Config,
     fzf::{Fzf, FzfArgs, FzfSpawn},
     rofi::{Rofi, RofiArgs, RofiSpawn},
-    ProcessArgs,
 };
 
 pub static BASE_URL: &'static str = "https://flixhq.to";
@@ -45,7 +44,7 @@ impl Display for MediaType {
     }
 }
 
-#[derive(ValueEnum, Debug, Clone)]
+#[derive(ValueEnum, Clone, Debug, Serialize, Deserialize, Copy, PartialEq)]
 #[clap(rename_all = "PascalCase")]
 enum Provider {
     Vidcloud,
@@ -105,7 +104,7 @@ impl Display for Quality {
     }
 }
 
-#[derive(ValueEnum, Debug, Clone)]
+#[derive(ValueEnum, Debug, Clone, Serialize, Deserialize, Copy)]
 #[clap(rename_all = "PascalCase")]
 enum Languages {
     Arabic,
@@ -143,73 +142,64 @@ struct Args {
     query: Option<String>,
 
     /// Continue watching from current history
-    #[clap(short, long, default_value_t = false)]
+    #[clap(short, long)]
     r#continue: bool,
 
     /// Downloads movie or episode that is selected (defaults to current directory)
-    #[clap(short, long, default_value = ".")]
-    download: PathBuf,
+    #[clap(short, long)]
+    download: Option<String>,
 
     /// Enables discord rich presence (beta feature, works fine on Linux)
-    #[clap(short, long, default_value_t = false)]
+    #[clap(short, long)]
     rpc: bool,
 
     /// Edit config file using an editor defined with lobster_editor in the config ($EDITOR by default)
-    #[clap(short, long, default_value_t = false)]
+    #[clap(short, long)]
     edit: bool,
 
     /// Shows image previews during media selection
-    #[clap(short, long, default_value_t = false)]
+    #[clap(short, long)]
     image_preview: bool,
 
     /// Outputs JSON containing video links, subtitle links, etc.
-    #[clap(short, long, default_value_t = false)]
+    #[clap(short, long)]
     json: bool,
 
     /// Specify the subtitle language
-    #[clap(short, long, default_value = "English")]
-    language: Languages,
+    #[clap(short, long)]
+    language: Option<Languages>,
 
     /// Use rofi instead of fzf
-    #[clap(long, default_value_t = false)]
+    #[clap(long)]
     rofi: bool,
 
     /// Specify the provider to watch from
-    #[clap(short, long, value_enum, default_value = "Vidcloud")]
-    provider: Provider,
+    #[clap(short, long, value_enum)]
+    provider: Option<Provider>,
 
     /// Specify the video quality
-    #[clap(short, long, value_enum, default_value = "q1080")]
-    quality: Quality,
+    #[clap(short, long, value_enum)]
+    quality: Option<Quality>,
 
     /// Lets you select from the most recent movies or TV shows
-    #[clap(long, value_enum, default_value = "movie")]
-    recent: MediaType,
+    #[clap(long, value_enum)]
+    recent: Option<MediaType>,
 
     /// Use Syncplay to watch with friends
-    #[clap(short, long, default_value_t = false)]
+    #[clap(short, long)]
     syncplay: bool,
 
     /// Lets you select from the most popular movies and shows
-    #[clap(short, long, default_value_t = false)]
+    #[clap(short, long)]
     trending: bool,
 
     /// Update the script
-    #[clap(short, long, default_value_t = false)]
+    #[clap(short, long)]
     update: bool,
 
     /// Enable debug mode (prints debug info to stdout and saves it to $TEMPDIR/lobster.log)
-    #[clap(long, default_value_t = false)]
+    #[clap(long)]
     debug: bool,
-}
-
-impl fmt::Display for Args {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self.download.to_str() {
-            Some(path) => write!(f, "{}", path),
-            None => write!(f, ""),
-        }
-    }
 }
 
 fn fzf_launcher(args: FzfArgs) -> String {
@@ -228,20 +218,61 @@ fn rofi_launcher(args: RofiArgs) -> String {
     String::from_utf8_lossy(&output.stdout).trim().to_string()
 }
 
-fn launcher(args: ProcessArgs) -> String {
-    match args {
-        ProcessArgs::Fzf(fzf_args) => fzf_launcher(fzf_args),
-        ProcessArgs::Rofi(rofi_args) => rofi_launcher(rofi_args),
+fn launcher(rofi: bool, rofi_args: RofiArgs, fzf_args: FzfArgs) -> String {
+    if rofi {
+        rofi_launcher(rofi_args)
+    } else {
+        fzf_launcher(fzf_args)
     }
+}
+
+fn program_configuration<'a>(args: &'a mut Args, config: &'a mut Config) -> &'a mut Args {
+    args.rofi = if !args.rofi {
+        config.use_external_menu
+    } else {
+        args.rofi
+    };
+
+    args.download = Some(
+        match &args.download {
+            Some(download) => download.as_str(),
+            None => &config.download,
+        }
+        .to_string(),
+    );
+
+    args.provider = Some(match &args.provider {
+        Some(provider) => *provider,
+        None => config.provider,
+    });
+
+    args.language = Some(match &args.language {
+        Some(language) => *language,
+        None => config.subs_language,
+    });
+
+    args.debug = if !args.debug {
+        config.debug
+    } else {
+        args.debug
+    };
+
+    args
 }
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let args = Args::parse();
+    let mut config =
+        Config::load_from_file(std::path::Path::new("~/.config/lobster_rs/config.toml"))
+            .expect("Failed to load config file");
 
-    let query = match args.query {
-        Some(query) => query,
-        None => get_input(args.rofi)?,
+    let mut args = Args::parse();
+
+    let settings = program_configuration(&mut args, &mut config);
+
+    let query = match &settings.query {
+        Some(query) => query.to_string(),
+        None => get_input(settings.rofi)?,
     };
 
     let results = FlixHQ.search(&query).await?;
@@ -260,13 +291,14 @@ async fn main() -> anyhow::Result<()> {
             )),
             FlixHQInfo::Tv(tv) => search_results.push(format!(
                 "{}\t{}\t{}\t{} [SZNS {}] [EPS {}]",
-                tv.image, tv.id, tv.media_type, tv.title, tv.seasons, tv.episodes
+                tv.image, tv.id, tv.media_type, tv.title, tv.seasons.total_seasons, tv.episodes
             )),
         }
     }
 
-    let media_choice = if args.rofi {
-        launcher(ProcessArgs::Rofi(RofiArgs {
+    let media_choice = launcher(
+        settings.rofi,
+        RofiArgs {
             process_stdin: Some(search_results.join("\n")),
             mesg: Some("Choose a movie or TV show".to_string()),
             dmenu: true,
@@ -274,17 +306,16 @@ async fn main() -> anyhow::Result<()> {
             entry_prompt: Some("".to_string()),
             display_columns: Some(4),
             ..Default::default()
-        }))
-    } else {
-        launcher(ProcessArgs::Fzf(FzfArgs {
+        },
+        FzfArgs {
             process_stdin: Some(search_results.join("\n")),
             reverse: true,
             with_nth: Some("4,5,6,7,8".to_string()),
             delimiter: Some("\t".to_string()),
             header: Some("Choose a movie or TV show".to_string()),
             ..Default::default()
-        }))
-    };
+        },
+    );
 
     let media_info = media_choice.split("\t").collect::<Vec<&str>>();
 
@@ -299,30 +330,88 @@ async fn main() -> anyhow::Result<()> {
         if let FlixHQInfo::Tv(tv) = show_info {
             let mut seasons: Vec<String> = vec![];
 
-            for season in 0..tv.seasons {
+            for season in 0..tv.seasons.total_seasons {
                 seasons.push(format!("Season {}", season + 1))
             }
 
-            let season_choice = if args.rofi {
-                launcher(ProcessArgs::Rofi(RofiArgs {
+            let season_choice = launcher(
+                settings.rofi,
+                RofiArgs {
                     process_stdin: Some(seasons.join("\n")),
                     mesg: Some("Choose a season".to_string()),
                     dmenu: true,
                     case_sensitive: true,
                     entry_prompt: Some("".to_string()),
                     ..Default::default()
-                }))
-            } else {
-                launcher(ProcessArgs::Fzf(FzfArgs {
+                },
+                FzfArgs {
                     process_stdin: Some(seasons.join("\n")),
                     reverse: true,
                     delimiter: Some("\t".to_string()),
                     header: Some("Choose a season".to_string()),
                     ..Default::default()
-                }))
-            };
+                },
+            );
 
-            println!("Selected season: {}", season_choice);
+            let season_number = season_choice.replace("Season ", "").parse::<usize>()?;
+
+            let mut episodes: Vec<String> = vec![];
+
+            for episode in &tv.seasons.episodes[season_number - 1] {
+                episodes.push(episode.title.to_string())
+            }
+
+            let episode_choice = launcher(
+                settings.rofi,
+                RofiArgs {
+                    process_stdin: Some(episodes.join("\n")),
+                    mesg: Some("Select an episode:".to_string()),
+                    dmenu: true,
+                    case_sensitive: true,
+                    entry_prompt: Some("".to_string()),
+                    ..Default::default()
+                },
+                FzfArgs {
+                    process_stdin: Some(episodes.join("\n")),
+                    reverse: true,
+                    delimiter: Some("\t".to_string()),
+                    header: Some("Select an episode:".to_string()),
+                    ..Default::default()
+                },
+            );
+
+            let episode_number = episode_choice
+                .strip_prefix("Eps ")
+                .and_then(|s| s.split(':').next())
+                .unwrap_or("1")
+                .trim()
+                .parse::<usize>()?;
+
+            let episode_id = &tv.seasons.episodes[season_number - 1][episode_number - 1].id;
+
+            let server_results = FlixHQ.servers(episode_id, media_id).await?;
+
+            let mut servers: Vec<Provider> = vec![];
+
+            for server_result in server_results.servers {
+                let provider = match server_result.name.as_str() {
+                    "Vidcloud" => Provider::Vidcloud,
+                    "Upcloud" => Provider::Upcloud,
+                    _ => continue,
+                };
+                servers.push(provider);
+            }
+
+            let server_choice = settings.provider.unwrap_or(Provider::Vidcloud);
+
+            let server = servers
+                .iter()
+                .find(|&&x| x == server_choice)
+                .unwrap_or(&Provider::Vidcloud);
+
+            let sources = FlixHQ.sources(episode_id, media_id, *server).await?;
+
+            println!("{:#?}", sources);
         }
     }
 

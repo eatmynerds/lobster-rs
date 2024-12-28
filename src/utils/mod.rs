@@ -1,12 +1,8 @@
+pub mod config;
 pub mod fzf;
 pub mod rofi;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
-
-pub enum ProcessArgs {
-    Fzf(fzf::FzfArgs),
-    Rofi(rofi::RofiArgs),
-}
 
 #[derive(Debug)]
 pub enum SpawnError {

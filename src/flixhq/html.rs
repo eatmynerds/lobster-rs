@@ -1,6 +1,6 @@
-use super::{
-    search::{FlixHQEpisode, FlixHQInfo, FlixHQMovie, FlixHQResult, FlixHQShow},
-    FlixHQ,
+use super::flixhq::{
+    FlixHQ, FlixHQEpisode, FlixHQInfo, FlixHQMovie, FlixHQResult, FlixHQSeason, FlixHQServer,
+    FlixHQShow,
 };
 use crate::{MediaType, BASE_URL};
 use visdom::types::Elements;
@@ -15,6 +15,37 @@ pub(super) trait FlixHQHTML {
     fn single_page(&self, html: &str, id: &str) -> FlixHQResult;
     fn season_info(&self, html: &str) -> Vec<String>;
     fn episode_info(&self, html: &str) -> Vec<FlixHQEpisode>;
+    fn info_server(&self, server_html: String, media_id: &str) -> Vec<FlixHQServer>;
+}
+
+struct PageElement {
+    id: String,
+    image: String,
+    title: String,
+    release_date: String,
+    episode: String,
+}
+
+fn page_elements<'a>(page_parser: &'a Page) -> impl Iterator<Item = PageElement> + use<'a> {
+    let ids = page_parser.page_ids();
+    let images = page_parser.page_images();
+    let titles = page_parser.page_titles();
+    let release_dates = page_parser.page_release_dates();
+    let episodes = page_parser.page_episodes();
+
+    ids.zip(images)
+        .zip(titles)
+        .zip(release_dates)
+        .zip(episodes)
+        .map(
+            |((((id, image), title), release_date), episode)| PageElement {
+                id,
+                image,
+                title,
+                release_date,
+                episode,
+            },
+        )
 }
 
 impl FlixHQHTML for FlixHQ {
@@ -23,18 +54,13 @@ impl FlixHQHTML for FlixHQ {
 
         let mut results: Vec<FlixHQInfo> = vec![];
 
-        let ids = page_parser.page_ids();
-        let images = page_parser.page_images();
-        let titles = page_parser.page_titles();
-        let release_dates = page_parser.page_release_dates();
-        let episodes = page_parser.page_episodes();
-
-        for ((((id, image), title), release_date), episode) in ids
-            .into_iter()
-            .zip(images)
-            .zip(titles)
-            .zip(release_dates)
-            .zip(episodes)
+        for PageElement {
+            id,
+            image,
+            title,
+            release_date,
+            episode,
+        } in page_elements(&page_parser)
         {
             let media_type = page_parser.media_type(&id);
 
@@ -44,7 +70,10 @@ impl FlixHQHTML for FlixHQ {
                         id,
                         title,
                         image,
-                        seasons: release_date.replace("SS ", "").parse().unwrap_or(0),
+                        seasons: FlixHQSeason {
+                            total_seasons: release_date.replace("SS ", "").parse().unwrap_or(0),
+                            episodes: vec![],
+                        },
                         episodes: episode.replace("EPS ", "").parse().unwrap_or(0),
                         media_type: MediaType::Tv,
                     }));
@@ -105,6 +134,14 @@ impl FlixHQHTML for FlixHQ {
 
         episode_parser.episode_results()
     }
+
+    fn info_server(&self, server_html: String, media_id: &str) -> Vec<FlixHQServer> {
+        let elements = create_html_fragment(&server_html);
+
+        let server_parser = Server::new(elements);
+
+        server_parser.parse_server_html(media_id)
+    }
 }
 
 struct Page<'a> {
@@ -117,7 +154,7 @@ impl<'a> Page<'a> {
         Self { elements }
     }
 
-    fn page_ids(&self) -> Vec<String> {
+    fn page_ids(&self) -> impl Iterator<Item = String> + use<'a> {
         self.elements
             .find("div.film-poster > a")
             .into_iter()
@@ -126,10 +163,9 @@ impl<'a> Page<'a> {
                     .get_attribute("href")
                     .and_then(|href| href.to_string().strip_prefix('/').map(String::from))
             })
-            .collect()
     }
 
-    fn page_images(&self) -> Vec<String> {
+    fn page_images(&self) -> impl Iterator<Item = String> + use<'a> {
         self.elements
             .find("div.film-poster > img")
             .into_iter()
@@ -138,10 +174,9 @@ impl<'a> Page<'a> {
                     .get_attribute("data-src")
                     .map(|value| value.to_string())
             })
-            .collect()
     }
 
-    fn page_titles(&self) -> Vec<String> {
+    fn page_titles(&self) -> impl Iterator<Item = String> + use<'a> {
         self.elements
             .find("div.film-detail > h2.film-name > a")
             .into_iter()
@@ -150,23 +185,20 @@ impl<'a> Page<'a> {
                     .get_attribute("title")
                     .map(|value| value.to_string())
             })
-            .collect()
     }
 
-    fn page_release_dates(&self) -> Vec<String> {
+    fn page_release_dates(&self) -> impl Iterator<Item = String> + use<'a> {
         self.elements
             .find("div.fd-infor > span:nth-child(1)")
             .into_iter()
             .map(|element| element.text())
-            .collect()
     }
 
-    fn page_episodes(&self) -> Vec<String> {
+    fn page_episodes(&self) -> impl Iterator<Item = String> + use<'a> {
         self.elements
             .find("div.fd-infor > span:nth-child(3)")
             .into_iter()
             .map(|element| element.text())
-            .collect()
     }
 
     fn media_type(&self, id: &str) -> Option<MediaType> {
@@ -307,5 +339,33 @@ impl<'a> Episode<'a> {
         }
 
         episodes
+    }
+}
+
+struct Server<'a> {
+    elements: Elements<'a>,
+}
+
+impl<'a> Server<'a> {
+    pub fn new(elements: Elements<'a>) -> Self {
+        Self { elements }
+    }
+
+    fn parse_server_html(&self, media_id: &str) -> Vec<FlixHQServer> {
+        self.elements.find("ul > li > a").map(|_, element| {
+            let id = element
+                .get_attribute("id")
+                .map(|value| value.to_string().replace("watch-", ""))
+                .unwrap_or(String::from(""));
+
+            let name = element
+                .get_attribute("title")
+                .map(|value| value.to_string().trim_start_matches("Server ").to_owned());
+
+            let url = format!("{}/watch-{}.{}", BASE_URL, media_id, id);
+            let name = name.unwrap_or(String::from(""));
+
+            FlixHQServer { name, url }
+        })
     }
 }

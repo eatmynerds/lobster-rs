@@ -1,4 +1,3 @@
+pub mod flixhq;
 pub(super) mod html;
-pub mod search;
 
-pub struct FlixHQ;
