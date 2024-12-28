@@ -18,7 +18,8 @@ impl Mpv {
 #[derive(Default)]
 pub struct MpvArgs {
     pub url: String,
-    pub subtitle: Option<String>,
+    pub sub_file: Option<String>,
+    pub sub_files: Option<Vec<String>>,
     pub force_media_title: Option<String>,
     pub quiet: bool,
     pub really_quiet: bool,
@@ -51,6 +52,10 @@ impl MpvPlay for Mpv {
             temp_args.push(format!("--msg-level=all={}", msg_level));
         }
 
+        if let Some(sub_files) = args.sub_files {
+            temp_args.push(format!("--sub-files='{}'", sub_files.join(":")));
+        }
+
         if args.save_position_on_quit {
             temp_args.push(String::from("--save-position-on-quit"));
         }
@@ -67,8 +72,8 @@ impl MpvPlay for Mpv {
             temp_args.push(format!("--input-ipc-server={}", input_ipc_server));
         }
 
-        if let Some(subtitle) = args.subtitle {
-            temp_args.push(format!("--sub-file={subtitle}"));
+        if let Some(sub_file) = args.sub_file {
+            temp_args.push(format!("--sub-file={sub_file}"));
         }
 
         if let Some(force_media_title) = args.force_media_title {
@@ -93,7 +98,6 @@ mod test {
         let mut child = mpv
             .play(MpvArgs {
                 url: String::from("https://www.youtube.com/watch?v=sNHzizPu7yQ&t=1s"),
-                msg_level: Some(String::from("no")),
                 ..Default::default()
             })
             .unwrap();

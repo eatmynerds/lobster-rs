@@ -13,7 +13,7 @@ use std::{
 mod cli;
 use cli::get_input;
 mod flixhq;
-use flixhq::flixhq::{FlixHQ, FlixHQInfo, FlixHQSourceType::VidCloud};
+use flixhq::flixhq::{FlixHQ, FlixHQInfo, FlixHQSourceType, FlixHQSubtitles};
 mod providers;
 mod utils;
 use utils::{
@@ -412,19 +412,25 @@ async fn main() -> anyhow::Result<()> {
 
             let sources = FlixHQ.sources(episode_id, media_id, *server).await?;
 
-            match sources.sources {
-                VidCloud(vidcloud_sources) => {
+            match (sources.sources, sources.subtitles) {
+                (
+                    FlixHQSourceType::VidCloud(vidcloud_sources),
+                    FlixHQSubtitles::VidCloud(vidcloud_subtitles),
+                ) => {
                     let mpv = Mpv::new();
 
                     let mut child = mpv.play(MpvArgs {
                         url: vidcloud_sources[0].file.to_string(),
-                        really_quiet: true,
+                        sub_file: Some(vidcloud_subtitles[0].file.to_string()),
                         ..Default::default()
                     })?;
 
                     child
                         .wait()
                         .expect("Failed to spawn child process for mpv.");
+                }
+                _ => {
+                    eprintln!("Unsupported source or subtitle type.");
                 }
             }
         }
@@ -453,19 +459,27 @@ async fn main() -> anyhow::Result<()> {
 
         let sources = FlixHQ.sources(episode_id, media_id, *server).await?;
 
-        match sources.sources {
-            VidCloud(vidcloud_sources) => {
+        match (sources.sources, sources.subtitles) {
+            (
+                FlixHQSourceType::VidCloud(vidcloud_sources),
+                FlixHQSubtitles::VidCloud(vidcloud_subtitles),
+            ) => {
                 let mpv = Mpv::new();
+
+                // TODO (eatmynerds): Make sure it selects the correct subtitle language
 
                 let mut child = mpv.play(MpvArgs {
                     url: vidcloud_sources[0].file.to_string(),
-                    really_quiet: true,
+                    sub_file: Some(vidcloud_subtitles[0].file.to_string()),
                     ..Default::default()
                 })?;
 
                 child
                     .wait()
                     .expect("Failed to spawn child process for mpv.");
+            }
+            _ => {
+                eprintln!("Unsupported source or subtitle type.");
             }
         }
     }
