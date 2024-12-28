@@ -13,7 +13,7 @@ use std::{
 mod cli;
 use cli::get_input;
 mod flixhq;
-use flixhq::flixhq::{FlixHQ, FlixHQInfo};
+use flixhq::flixhq::{FlixHQ, FlixHQInfo, FlixHQSourceType::VidCloud};
 mod providers;
 mod utils;
 use utils::{
@@ -411,6 +411,62 @@ async fn main() -> anyhow::Result<()> {
                 .unwrap_or(&Provider::Vidcloud);
 
             let sources = FlixHQ.sources(episode_id, media_id, *server).await?;
+
+            match sources.sources {
+                VidCloud(vidcloud_sources) => {
+                    let mpv = Mpv::new();
+
+                    let mut child = mpv.play(MpvArgs {
+                        url: vidcloud_sources[0].file.to_string(),
+                        really_quiet: true,
+                        ..Default::default()
+                    })?;
+
+                    child
+                        .wait()
+                        .expect("Failed to spawn child process for mpv.");
+                }
+            }
+        }
+    } else {
+        let episode_id = &media_id.rsplit("-").collect::<Vec<&str>>()[0];
+
+        let server_results = FlixHQ.servers(episode_id, media_id).await?;
+
+        let mut servers: Vec<Provider> = vec![];
+
+        for server_result in server_results.servers {
+            let provider = match server_result.name.as_str() {
+                "Vidcloud" => Provider::Vidcloud,
+                "Upcloud" => Provider::Upcloud,
+                _ => continue,
+            };
+            servers.push(provider);
+        }
+
+        let server_choice = settings.provider.unwrap_or(Provider::Vidcloud);
+
+        let server = servers
+            .iter()
+            .find(|&&x| x == server_choice)
+            .unwrap_or(&Provider::Vidcloud);
+
+        let sources = FlixHQ.sources(episode_id, media_id, *server).await?;
+
+        match sources.sources {
+            VidCloud(vidcloud_sources) => {
+                let mpv = Mpv::new();
+
+                let mut child = mpv.play(MpvArgs {
+                    url: vidcloud_sources[0].file.to_string(),
+                    really_quiet: true,
+                    ..Default::default()
+                })?;
+
+                child
+                    .wait()
+                    .expect("Failed to spawn child process for mpv.");
+            }
         }
     }
 
