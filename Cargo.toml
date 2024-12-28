@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 anyhow = "1.0.95"
 clap = { version = "4.5.23", features = ["derive"] }
+dirs = "5.0.1"
 futures = "0.3.31"
 lazy_static = "1.5.0"
 reqwest = "0.12.9"
@@ -13,4 +14,5 @@ serde = { version = "1.0.216", features = ["derive"] }
 serde_json = "1.0.134"
 thiserror = "2.0.9"
 tokio = { version = "1.42.0", features = ["full"] }
+toml = "0.8.19"
 visdom = "1.0.2"
