@@ -5,7 +5,7 @@ pub fn get_input(rofi: bool) -> anyhow::Result<String> {
     if rofi {
         let mut rofi = Rofi::new();
 
-        let rofi_output = rofi.spawn(RofiArgs {
+        let rofi_output = rofi.spawn(&mut RofiArgs {
             sort: true,
             dmenu: true,
             case_sensitive: true,

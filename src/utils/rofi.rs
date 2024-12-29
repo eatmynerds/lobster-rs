@@ -15,7 +15,7 @@ impl Rofi {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct RofiArgs {
     pub process_stdin: Option<String>,
     pub mesg: Option<String>,
@@ -34,30 +34,30 @@ pub struct RofiArgs {
 }
 
 pub trait RofiSpawn {
-    fn spawn(&mut self, args: RofiArgs) -> Result<std::process::Output, SpawnError>;
+    fn spawn(&mut self, args: &mut RofiArgs) -> Result<std::process::Output, SpawnError>;
 }
 
 impl RofiSpawn for Rofi {
-    fn spawn(&mut self, args: RofiArgs) -> Result<std::process::Output, SpawnError> {
+    fn spawn(&mut self, args: &mut RofiArgs) -> Result<std::process::Output, SpawnError> {
         let mut temp_args = self.args.clone();
 
-        if let Some(filter) = args.filter {
+        if let Some(filter) = &args.filter {
             temp_args.push("-filter".to_string());
-            temp_args.push(filter);
+            temp_args.push(filter.to_string());
         }
 
         if args.show_icons {
             temp_args.push("-show-icons".to_string());
         }
 
-        if let Some(drun_categories) = args.drun_categories {
+        if let Some(drun_categories) = &args.drun_categories {
             temp_args.push("-drun-categories".to_string());
-            temp_args.push(drun_categories);
+            temp_args.push(drun_categories.to_string());
         }
 
-        if let Some(theme) = args.theme {
+        if let Some(theme) = &args.theme {
             temp_args.push("-theme".to_string());
-            temp_args.push(theme);
+            temp_args.push(theme.to_string());
         }
 
         if args.sort {
@@ -72,40 +72,40 @@ impl RofiSpawn for Rofi {
             temp_args.push("-i".to_string());
         }
 
-        if let Some(width) = args.width {
+        if let Some(width) = &args.width {
             temp_args.push("-width".to_string());
             temp_args.push(width.to_string());
         }
 
-        if let Some(show) = args.show {
+        if let Some(show) = &args.show {
             temp_args.push("-show".to_string());
-            temp_args.push(show);
+            temp_args.push(show.to_string());
         }
 
-        if let Some(left_display_prompt) = args.left_display_prompt {
+        if let Some(left_display_prompt) = &args.left_display_prompt {
             temp_args.push("-left-display-prompt".to_string());
-            temp_args.push(left_display_prompt);
+            temp_args.push(left_display_prompt.to_string());
         }
 
-        if let Some(entry_prompt) = args.entry_prompt {
+        if let Some(entry_prompt) = &args.entry_prompt {
             temp_args.push("-p".to_string());
-            temp_args.push(entry_prompt);
+            temp_args.push(entry_prompt.to_string());
         }
 
-        if let Some(display_columns) = args.display_columns {
+        if let Some(display_columns) = &args.display_columns {
             temp_args.push("-display-columns".to_string());
             temp_args.push(display_columns.to_string());
         }
 
-        if let Some(mesg) = args.mesg {
+        if let Some(mesg) = &args.mesg {
             temp_args.push("-mesg".to_string());
-            temp_args.push(mesg);
+            temp_args.push(mesg.to_string());
         }
 
         let mut command = std::process::Command::new(&self.executable);
         command.args(&temp_args);
 
-        if let Some(process_stdin) = args.process_stdin {
+        if let Some(process_stdin) = &args.process_stdin {
             command
                 .stdin(std::process::Stdio::piped())
                 .stdout(std::process::Stdio::piped())
@@ -143,7 +143,7 @@ mod test {
     fn test_rofi_spawn() {
         let mut rofi = Rofi::new();
         let output = rofi
-            .spawn(RofiArgs {
+            .spawn(&mut RofiArgs {
                 process_stdin: Some("Hello\nWorld!".to_string()),
                 sort: true,
                 dmenu: true,

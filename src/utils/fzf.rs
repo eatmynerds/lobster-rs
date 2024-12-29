@@ -30,14 +30,14 @@ pub struct FzfArgs {
 }
 
 pub trait FzfSpawn {
-    fn spawn(&mut self, args: FzfArgs) -> Result<std::process::Output, SpawnError>;
+    fn spawn(&mut self, args: &mut FzfArgs) -> Result<std::process::Output, SpawnError>;
 }
 
 impl FzfSpawn for Fzf {
-    fn spawn(&mut self, args: FzfArgs) -> Result<std::process::Output, SpawnError> {
+    fn spawn(&mut self, args: &mut FzfArgs) -> Result<std::process::Output, SpawnError> {
         let mut temp_args = self.args.clone();
 
-        if let Some(header) = args.header {
+        if let Some(header) = &args.header {
             temp_args.push(format!("--header={}", header));
         }
 
@@ -45,11 +45,11 @@ impl FzfSpawn for Fzf {
             temp_args.push("--reverse".to_string());
         }
 
-        if let Some(preview) = args.preview {
+        if let Some(preview) = &args.preview {
             temp_args.push(format!("--preview={}", preview));
         }
 
-        if let Some(with_nth) = args.with_nth {
+        if let Some(with_nth) = &args.with_nth {
             temp_args.push(format!("--with-nth={}", with_nth));
         }
 
@@ -57,7 +57,7 @@ impl FzfSpawn for Fzf {
             temp_args.push("--ignore-case".to_string());
         }
 
-        if let Some(query) = args.query {
+        if let Some(query) = &args.query {
             temp_args.push(format!("--query={}", query));
         }
 
@@ -65,18 +65,18 @@ impl FzfSpawn for Fzf {
             temp_args.push("--cycle".to_string());
         }
 
-        if let Some(delimiter) = args.delimiter {
+        if let Some(delimiter) = &args.delimiter {
             temp_args.push(format!("--delimiter={}", delimiter));
         }
 
-        if let Some(preview_window) = args.preview_window {
+        if let Some(preview_window) = &args.preview_window {
             temp_args.push(format!("--preview-window={}", preview_window));
         }
 
         let mut command = std::process::Command::new(&self.executable);
         command.args(&temp_args);
 
-        if let Some(process_stdin) = args.process_stdin {
+        if let Some(process_stdin) = &args.process_stdin {
             command
                 .stdin(Stdio::piped())
                 .stdout(Stdio::piped())
@@ -114,7 +114,7 @@ mod test {
     fn test_fzf_spawn() {
         let mut fzf = Fzf::new();
         let output = fzf
-            .spawn(FzfArgs {
+            .spawn(&mut FzfArgs {
                 process_stdin: Some("Hello\nWorld".to_string()),
                 delimiter: Some(String::from("\t")),
                 ..Default::default()

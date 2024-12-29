@@ -99,7 +99,7 @@ impl MpvPlay for Mpv {
 
 #[cfg(test)]
 mod test {
-    use crate::utils::mpv::{Mpv, MpvArgs, MpvPlay};
+    use crate::utils::players::mpv::{Mpv, MpvArgs, MpvPlay};
 
     #[test]
     fn test_mpv_spawn() {

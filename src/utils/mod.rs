@@ -1,7 +1,8 @@
 pub mod config;
 pub mod fzf;
-pub mod mpv;
 pub mod rofi;
+pub mod image_preview;
+pub mod players;
 
 #[derive(thiserror::Error, Debug)]
 pub enum SpawnError {

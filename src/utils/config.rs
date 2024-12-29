@@ -49,7 +49,7 @@ impl Config {
         let config_dir = dirs::config_dir().context("Failed to retrieve the config directory")?;
 
         let config = Config::load_from_file(Path::new(&format!(
-            "{}/lobster/config.toml",
+            "{}/lobster_rs/config.toml",
             config_dir.display()
         )))?;
 
@@ -58,6 +58,7 @@ impl Config {
 
     pub fn load_from_file(file_path: &Path) -> anyhow::Result<Self> {
         if !file_path.exists() {
+            println!("Creating default config file");
             let default_config = Config::new();
             let content = toml::to_string(&default_config)
                 .with_context(|| "Failed to serialize the default config")?;
@@ -91,6 +92,12 @@ impl Config {
         } else {
             args.rofi = false;
         }
+
+        args.image_preview = if !args.image_preview {
+            config.image_preview
+        } else {
+            args.image_preview
+        };
 
         args.download = Some(
             match &args.download {

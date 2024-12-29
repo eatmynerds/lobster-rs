@@ -20,7 +20,11 @@ mod utils;
 use utils::{
     config::Config,
     fzf::{Fzf, FzfArgs, FzfSpawn},
-    mpv::{Mpv, MpvArgs, MpvPlay},
+    image_preview::{generate_desktop, image_preview, remove_desktop_and_tmp},
+    players::{
+        mpv::{Mpv, MpvArgs, MpvPlay},
+        vlc::{Vlc, VlcArgs, VlcPlay},
+    },
     rofi::{Rofi, RofiArgs, RofiSpawn},
 };
 
@@ -204,7 +208,7 @@ struct Args {
     debug: bool,
 }
 
-fn fzf_launcher(args: FzfArgs) -> String {
+fn fzf_launcher<'a>(args: &'a mut FzfArgs) -> String {
     let mut fzf = Fzf::new();
 
     fzf.spawn(args)
@@ -215,7 +219,7 @@ fn fzf_launcher(args: FzfArgs) -> String {
         })
 }
 
-fn rofi_launcher(args: RofiArgs) -> String {
+fn rofi_launcher<'a>(args: &'a mut RofiArgs) -> String {
     let mut rofi = Rofi::new();
 
     rofi.spawn(args)
@@ -226,7 +230,41 @@ fn rofi_launcher(args: RofiArgs) -> String {
         })
 }
 
-fn launcher(rofi: bool, rofi_args: RofiArgs, fzf_args: FzfArgs) -> String {
+async fn launcher(
+    image_preview_files: &Vec<(String, String, String)>,
+    rofi: bool,
+    rofi_args: &mut RofiArgs,
+    fzf_args: &mut FzfArgs,
+) -> String {
+    if image_preview_files.len() == 0 {
+    } else {
+        let temp_images_dirs = image_preview(image_preview_files)
+            .await
+            .expect("Failed to generate image previews");
+
+        if rofi {
+            for (media_name, media_id, image_path) in temp_images_dirs {
+                generate_desktop(media_name, media_id, image_path)
+                    .expect("Failed to generate desktop entry for image preview");
+            }
+
+            rofi_args.show = Some("drun".to_string());
+            rofi_args.drun_categories = Some("imagepreview".to_string());
+            rofi_args.show_icons = true;
+            rofi_args.dmenu = false;
+        } else {
+            fzf_args.preview = Some(
+                r#"
+            selected=$(echo {} | cut -f2 | sed 's/\//-/g')
+            chafa -f sixel -s 80x40 "/tmp/images/${selected}.jpg"
+                "#
+                .to_string(),
+            );
+
+            fzf_args.cycle = true;
+        }
+    }
+
     if rofi {
         rofi_launcher(rofi_args)
     } else {
@@ -292,23 +330,59 @@ async fn main() -> anyhow::Result<()> {
     }
 
     let mut search_results: Vec<String> = vec![];
+    let mut image_preview_files: Vec<(String, String, String)> = vec![];
 
     for result in results {
         match result {
-            FlixHQInfo::Movie(movie) => search_results.push(format!(
-                "{}\t{}\t{}\t{} [{}] [{}]",
-                movie.image, movie.id, movie.media_type, movie.title, movie.year, movie.duration
-            )),
-            FlixHQInfo::Tv(tv) => search_results.push(format!(
-                "{}\t{}\t{}\t{} [SZNS {}] [EPS {}]",
-                tv.image, tv.id, tv.media_type, tv.title, tv.seasons.total_seasons, tv.episodes
-            )),
+            FlixHQInfo::Movie(movie) => {
+                if settings.image_preview {
+                    image_preview_files.push((
+                        movie.title.to_string(),
+                        movie.image.to_string(),
+                        movie.id.to_string(),
+                    ));
+                }
+
+                let movie_duration = movie.duration.replace("m", "").parse::<u32>()?;
+                let formatted_duration = if movie_duration >= 60 {
+                    let hours = movie_duration / 60;
+                    let minutes = movie_duration % 60;
+                    format!("{}h{}min", hours, minutes)
+                } else {
+                    format!("{}m", movie_duration)
+                };
+
+                search_results.push(format!(
+                    "{}\t{}\t{}\t{} [{}] [{}]",
+                    movie.image,
+                    movie.id,
+                    movie.media_type,
+                    movie.title,
+                    movie.year,
+                    formatted_duration
+                ));
+            }
+            FlixHQInfo::Tv(tv) => {
+                if settings.image_preview {
+                    image_preview_files.push((
+                        tv.title.to_string(),
+                        tv.image.to_string(),
+                        tv.id.to_string(),
+                    ));
+                }
+
+                search_results.push(format!(
+                    "{}\t{}\t{}\t{} [SZNS {}] [EPS {}]",
+                    tv.image, tv.id, tv.media_type, tv.title, tv.seasons.total_seasons, tv.episodes
+                ))
+            }
         }
     }
 
-    let media_choice = launcher(
+    let mut media_choice = launcher(
+        &image_preview_files,
         settings.rofi,
-        RofiArgs {
+        &mut RofiArgs {
             process_stdin: Some(search_results.join("\n")),
             mesg: Some("Choose a movie or TV show".to_string()),
             dmenu: true,
@@ -317,22 +391,39 @@ async fn main() -> anyhow::Result<()> {
             display_columns: Some(4),
             ..Default::default()
         },
-        FzfArgs {
+        &mut FzfArgs {
             process_stdin: Some(search_results.join("\n")),
             reverse: true,
-            with_nth: Some("4,5,6,7,8".to_string()),
+            with_nth: Some("4,5,6,7".to_string()),
             delimiter: Some("\t".to_string()),
             header: Some("Choose a movie or TV show".to_string()),
             ..Default::default()
         },
-    );
+    )
+    .await;
+
+    if settings.image_preview {
+        for (_, _, media_id) in &image_preview_files {
+            remove_desktop_and_tmp(media_id.to_string())
+                .expect("Failed to remove old .desktop files & tmp images");
+        }
+    }
+
+    if settings.rofi {
+        for result in search_results {
+            if result.contains(&media_choice) {
+                media_choice = result;
+                break;
+            }
+        }
+    }
 
     let media_info = media_choice.split("\t").collect::<Vec<&str>>();
 
-    let image_link = media_info[0];
-    let media_id = media_info[1];
-    let media_type = media_info[2];
-    let media_title = media_info[3].split('[').next().unwrap_or("").trim();
+    let image_link = media_info[1];
+    let media_id = media_info[2];
+    let media_type = media_info[3];
+    let media_title = media_info[4].split('[').next().unwrap_or("").trim();
 
     if media_type == "tv" {
         let show_info = FlixHQ.info(&media_id).await?;
@@ -345,8 +436,9 @@ async fn main() -> anyhow::Result<()> {
             }
 
             let season_choice = launcher(
+                &vec![],
                 settings.rofi,
-                RofiArgs {
+                &mut RofiArgs {
                     process_stdin: Some(seasons.join("\n")),
                     mesg: Some("Choose a season".to_string()),
                     dmenu: true,
@@ -354,14 +446,15 @@ async fn main() -> anyhow::Result<()> {
                     entry_prompt: Some("".to_string()),
                     ..Default::default()
                 },
-                FzfArgs {
+                &mut FzfArgs {
                     process_stdin: Some(seasons.join("\n")),
                     reverse: true,
                     delimiter: Some("\t".to_string()),
                     header: Some("Choose a season".to_string()),
                     ..Default::default()
                 },
-            );
+            )
+            .await;
 
             let season_number = season_choice.replace("Season ", "").parse::<usize>()?;
 
@@ -372,8 +465,9 @@ async fn main() -> anyhow::Result<()> {
             }
 
             let episode_choice = launcher(
+                &vec![],
                 settings.rofi,
-                RofiArgs {
+                &mut RofiArgs {
                     process_stdin: Some(episodes.join("\n")),
                     mesg: Some("Select an episode:".to_string()),
                     dmenu: true,
@@ -381,14 +475,15 @@ async fn main() -> anyhow::Result<()> {
                     entry_prompt: Some("".to_string()),
                     ..Default::default()
                 },
-                FzfArgs {
+                &mut FzfArgs {
                     process_stdin: Some(episodes.join("\n")),
                     reverse: true,
                     delimiter: Some("\t".to_string()),
                     header: Some("Select an episode:".to_string()),
                     ..Default::default()
                 },
-            );
+            )
+            .await;
 
             let episode_number = episode_choice
                 .strip_prefix("Eps ")
@@ -437,20 +532,46 @@ async fn main() -> anyhow::Result<()> {
                         }
                     }
 
-                    let mpv = Mpv::new();
+                    match config.player.as_str() {
+                        "vlc" => {
+                            let vlc = Vlc::new();
 
-                    let mut child = mpv.play(MpvArgs {
-                        // (eatmynerds): Play the first source since multiple qualites are not provided
-                        // anymore
-                        url: vidcloud_sources[0].file.to_string(),
-                        sub_files: Some(selected_subtitles),
-                        force_media_title: Some(media_title.to_string()),
-                        ..Default::default()
-                    })?;
+                            let mut child = vlc
+                                .play(VlcArgs {
+                                    // (eatmynerds): Play the first source since multiple qualites are not provided
+                                    // anymore
+                                    url: vidcloud_sources[0].file.to_string(),
+                                    input_slave: Some(selected_subtitles),
+                                    meta_title: Some(media_title.to_string()),
+                                    ..Default::default()
+                                })
+                                .unwrap();
 
-                    child
-                        .wait()
-                        .expect("Failed to spawn child process for mpv.");
+                            child
+                                .wait()
+                                .expect("Failed to spawn child process for vlc.");
+                        }
+                        "mpv" => {
+                            let mpv = Mpv::new();
+
+                            let mut child = mpv.play(MpvArgs {
+                                // (eatmynerds): Play the first source since multiple qualites are not provided
+                                // anymore
+                                url: vidcloud_sources[0].file.to_string(),
+                                sub_files: Some(selected_subtitles),
+                                force_media_title: Some(media_title.to_string()),
+                                ..Default::default()
+                            })?;
+
+                            child
+                                .wait()
+                                .expect("Failed to spawn child process for mpv.");
+                        }
+                        _ => {
+                            eprintln!("Player not supported");
+                            std::process::exit(1)
+                        }
+                    }
                 }
             }
         }
@@ -495,20 +616,46 @@ async fn main() -> anyhow::Result<()> {
                     }
                 }
 
-                let mpv = Mpv::new();
+                match config.player.as_str() {
+                    "vlc" => {
+                        let vlc = Vlc::new();
 
-                let mut child = mpv.play(MpvArgs {
-                    // (eatmynerds): Play the first source since multiple qualites are not provided
-                    // anymore
-                    url: vidcloud_sources[0].file.to_string(),
-                    sub_files: Some(selected_subtitles),
-                    force_media_title: Some(media_title.to_string()),
-                    ..Default::default()
-                })?;
+                        let mut child = vlc
+                            .play(VlcArgs {
+                                // (eatmynerds): Play the first source since multiple qualites are not provided
+                                // anymore
+                                url: vidcloud_sources[0].file.to_string(),
+                                input_slave: Some(selected_subtitles),
+                                meta_title: Some(media_title.to_string()),
+                                ..Default::default()
+                            })
+                            .unwrap();
 
-                child
-                    .wait()
-                    .expect("Failed to spawn child process for mpv.");
+                        child
+                            .wait()
+                            .expect("Failed to spawn child process for vlc.");
+                    }
+                    "mpv" => {
+                        let mpv = Mpv::new();
+
+                        let mut child = mpv.play(MpvArgs {
+                            // (eatmynerds): Play the first source since multiple qualites are not provided
+                            // anymore
+                            url: vidcloud_sources[0].file.to_string(),
+                            sub_files: Some(selected_subtitles),
+                            force_media_title: Some(media_title.to_string()),
+                            ..Default::default()
+                        })?;
+
+                        child
+                            .wait()
+                            .expect("Failed to spawn child process for mpv.");
+                    }
+                    _ => {
+                        eprintln!("Player not supported");
+                        std::process::exit(1)
+                    }
+                }
             }
         }
     }
