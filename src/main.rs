@@ -235,10 +235,21 @@ fn launcher(rofi: bool, rofi_args: RofiArgs, fzf_args: FzfArgs) -> String {
 }
 
 fn update() -> anyhow::Result<()> {
+    let current_os = std::env::consts::OS;
+
+    let binary_name = match current_os {
+        "windows" => "lobster-rs-x86_64-windows.exe",
+        "linux" => "lobster-rs-x86_64-unknown-linux-gnu",
+        _ => {
+            eprintln!("Cannot update current OS not supported!");
+            std::process::exit(1)
+        }
+    };
+
     let status = self_update::backends::github::Update::configure()
         .repo_owner("eatmynerds")
         .repo_name("lobster-rs")
-        .bin_name("lobster-rs")
+        .bin_name(binary_name)
         .show_download_progress(true)
         .current_version(cargo_crate_version!())
         .build()?
