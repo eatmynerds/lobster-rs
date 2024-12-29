@@ -1,5 +1,4 @@
 use super::SpawnError;
-use std::io::Write;
 
 pub struct Mpv {
     pub executable: String,

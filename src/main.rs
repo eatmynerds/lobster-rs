@@ -417,20 +417,31 @@ async fn main() -> anyhow::Result<()> {
                     FlixHQSourceType::VidCloud(vidcloud_sources),
                     FlixHQSubtitles::VidCloud(vidcloud_subtitles),
                 ) => {
+                    let mut selected_subtitles: Vec<String> = vec![];
+
+                    for subtitle in &vidcloud_subtitles {
+                        if subtitle
+                            .label
+                            .contains(&settings.language.unwrap_or(Languages::English).to_string())
+                        {
+                            selected_subtitles.push(subtitle.file.to_string());
+                        }
+                    }
+
                     let mpv = Mpv::new();
 
                     let mut child = mpv.play(MpvArgs {
+                        // (eatmynerds): Play the first source since multiple qualites are not provided
+                        // anymore
                         url: vidcloud_sources[0].file.to_string(),
-                        sub_file: Some(vidcloud_subtitles[0].file.to_string()),
+                        sub_files: Some(selected_subtitles),
+                        force_media_title: Some(media_title.to_string()),
                         ..Default::default()
                     })?;
 
                     child
                         .wait()
                         .expect("Failed to spawn child process for mpv.");
-                }
-                _ => {
-                    eprintln!("Unsupported source or subtitle type.");
                 }
             }
         }
@@ -464,22 +475,31 @@ async fn main() -> anyhow::Result<()> {
                 FlixHQSourceType::VidCloud(vidcloud_sources),
                 FlixHQSubtitles::VidCloud(vidcloud_subtitles),
             ) => {
+                let mut selected_subtitles: Vec<String> = vec![];
+
+                for subtitle in &vidcloud_subtitles {
+                    if subtitle
+                        .label
+                        .contains(&settings.language.unwrap_or(Languages::English).to_string())
+                    {
+                        selected_subtitles.push(subtitle.file.to_string());
+                    }
+                }
+
                 let mpv = Mpv::new();
 
-                // TODO (eatmynerds): Make sure it selects the correct subtitle language
-
                 let mut child = mpv.play(MpvArgs {
+                    // (eatmynerds): Play the first source since multiple qualites are not provided
+                    // anymore
                     url: vidcloud_sources[0].file.to_string(),
-                    sub_file: Some(vidcloud_subtitles[0].file.to_string()),
+                    sub_files: Some(selected_subtitles),
+                    force_media_title: Some(media_title.to_string()),
                     ..Default::default()
                 })?;
 
                 child
                     .wait()
                     .expect("Failed to spawn child process for mpv.");
-            }
-            _ => {
-                eprintln!("Unsupported source or subtitle type.");
             }
         }
     }

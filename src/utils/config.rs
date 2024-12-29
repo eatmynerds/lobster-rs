@@ -41,7 +41,7 @@ impl Config {
     pub fn load_from_file(file_path: &Path) -> anyhow::Result<Self> {
         let home_dir = dirs::home_dir().context("Failed to retrieve the home directory")?;
 
-        let config_file_path = home_dir.join(".config/lobster_rs/config.toml");
+        let config_file_path = home_dir.join(file_path);
         if !config_file_path.exists() {
             let default_config = Config::new();
             let content = toml::to_string(&default_config)

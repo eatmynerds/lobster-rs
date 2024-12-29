@@ -1,10 +1,5 @@
 use super::SpawnError;
-use std::{
-    error::Error,
-    fmt::{Display, Formatter},
-    io::{Read, Write},
-    process::Stdio,
-};
+use std::{io::Write, process::Stdio};
 
 pub struct Fzf {
     pub executable: String,
@@ -102,7 +97,7 @@ impl FzfSpawn for Fzf {
                 .stdout(Stdio::piped())
                 .stderr(Stdio::piped());
 
-            let mut child = command.spawn().map_err(SpawnError::IOError)?;
+            let child = command.spawn().map_err(SpawnError::IOError)?;
 
             let output = child.wait_with_output().map_err(SpawnError::IOError)?;
 

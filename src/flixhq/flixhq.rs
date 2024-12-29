@@ -7,9 +7,7 @@ use crate::{
     MediaType, Provider, BASE_URL, CLIENT,
 };
 use anyhow::anyhow;
-use futures::{stream::FuturesUnordered, StreamExt};
 use serde::Deserialize;
-use std::sync::{Arc, Mutex};
 
 #[derive(Debug)]
 pub enum FlixHQInfo {
@@ -57,7 +55,6 @@ pub struct FlixHQResult {
 pub struct FlixHQEpisode {
     pub id: String,
     pub title: String,
-    pub url: String,
 }
 
 #[derive(Debug)]
@@ -78,7 +75,6 @@ pub struct FlixHQServerInfo {
 
 #[derive(Debug)]
 pub struct FlixHQSources {
-    pub headers: String,
     pub subtitles: FlixHQSubtitles,
     pub sources: FlixHQSourceType,
 }
@@ -258,7 +254,6 @@ impl FlixHQ {
                 return Ok(FlixHQSources {
                     sources: FlixHQSourceType::VidCloud(vidcloud.sources),
                     subtitles: FlixHQSubtitles::VidCloud(vidcloud.tracks),
-                    headers: server_info.link,
                 });
             }
             Provider::Upcloud => {
@@ -269,7 +264,6 @@ impl FlixHQ {
                 return Ok(FlixHQSources {
                     sources: FlixHQSourceType::VidCloud(vidcloud.sources),
                     subtitles: FlixHQSubtitles::VidCloud(vidcloud.tracks),
-                    headers: server_info.link,
                 });
             }
         }

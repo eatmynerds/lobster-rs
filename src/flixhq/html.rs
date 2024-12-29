@@ -329,11 +329,9 @@ impl<'a> Episode<'a> {
 
         for (id, title) in episode_ids.iter().zip(episode_titles.iter()) {
             if let Some(id) = id {
-                let url = format!("{}/ajax/v2/episode/servers/{}", BASE_URL, id);
                 episodes.push(FlixHQEpisode {
                     id: id.to_string(),
                     title: title.as_deref().unwrap_or("").to_string(),
-                    url,
                 });
             }
         }
