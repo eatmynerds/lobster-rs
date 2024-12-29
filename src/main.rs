@@ -241,7 +241,7 @@ fn update() -> anyhow::Result<()> {
         "windows" => "lobster-rs-x86_64-windows.exe",
         "linux" => "lobster-rs-x86_64-unknown-linux-gnu",
         _ => {
-            eprintln!("Cannot update current OS not supported!");
+            eprintln!("Cannot update: current OS not supported!");
             std::process::exit(1)
         }
     };

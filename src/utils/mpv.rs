@@ -86,8 +86,6 @@ impl MpvPlay for Mpv {
             temp_args.push(format!("--force-media-title={}", force_media_title));
         }
 
-        dbg!(&temp_args);
-
         std::process::Command::new(&self.executable)
             .args(temp_args)
             .spawn()
