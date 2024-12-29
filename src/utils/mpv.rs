@@ -52,7 +52,14 @@ impl MpvPlay for Mpv {
         }
 
         if let Some(sub_files) = args.sub_files {
-            temp_args.push(format!("--sub-files='{}'", sub_files.join(":")));
+            let mut temp_sub_files = String::new();
+
+            for sub_file in sub_files {
+                temp_sub_files.push_str(&sub_file.replace(":", r#"\:"#));
+                temp_sub_files.push_str(":");
+            }
+
+            temp_args.push(format!("--sub-files={}", temp_sub_files));
         }
 
         if args.save_position_on_quit {
@@ -78,6 +85,8 @@ impl MpvPlay for Mpv {
         if let Some(force_media_title) = args.force_media_title {
             temp_args.push(format!("--force-media-title={}", force_media_title));
         }
+
+        dbg!(&temp_args);
 
         std::process::Command::new(&self.executable)
             .args(temp_args)
