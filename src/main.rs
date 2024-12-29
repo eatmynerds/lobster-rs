@@ -265,7 +265,15 @@ async fn main() -> anyhow::Result<()> {
     let mut args = Args::parse();
 
     if args.update {
-        update()?;
+        let update_result = tokio::task::spawn_blocking(move || update()).await?;
+
+        match update_result {
+            Ok(_) => {}
+            Err(e) => {
+                eprintln!("{}", e);
+                std::process::exit(1)
+            }
+        }
     }
 
     let mut config = Config::load_config().expect("Failed to load config file");
