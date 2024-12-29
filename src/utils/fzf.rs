@@ -1,4 +1,4 @@
-use super::SpawnError;
+use crate::utils::SpawnError;
 use std::{io::Write, process::Stdio};
 
 pub struct Fzf {

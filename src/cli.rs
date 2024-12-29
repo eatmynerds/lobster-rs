@@ -1,24 +1,23 @@
 use crate::utils::rofi::{Rofi, RofiArgs, RofiSpawn};
-use std::io;
-use std::io::Write;
+use std::{io, io::Write};
 
-pub fn get_input(rofi: bool) -> Result<String, std::io::Error> {
+pub fn get_input(rofi: bool) -> anyhow::Result<String> {
     if rofi {
         let mut rofi = Rofi::new();
 
-        let output = rofi
-            .spawn(RofiArgs {
-                sort: true,
-                dmenu: true,
-                case_sensitive: true,
-                width: Some(1500),
-                entry_prompt: Some("".to_string()),
-                mesg: Some("Search Movie/TV Show".to_string()),
-                ..Default::default()
-            })
-            .unwrap();
+        let rofi_output = rofi.spawn(RofiArgs {
+            sort: true,
+            dmenu: true,
+            case_sensitive: true,
+            width: Some(1500),
+            entry_prompt: Some("".to_string()),
+            mesg: Some("Search Movie/TV Show".to_string()),
+            ..Default::default()
+        })?;
 
-        Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+        Ok(String::from_utf8_lossy(&rofi_output.stdout)
+            .trim()
+            .to_string())
     } else {
         print!("Search Movie/TV Show: ");
         io::stdout().flush()?;

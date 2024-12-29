@@ -1,5 +1,5 @@
-use super::html::FlixHQHTML;
 use crate::{
+    flixhq::html::FlixHQHTML,
     providers::{
         vidcloud::{Source, Track, VidCloud},
         VideoExtractor,

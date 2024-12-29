@@ -1,4 +1,4 @@
-use super::SpawnError;
+use crate::utils::SpawnError;
 
 pub struct Mpv {
     pub executable: String,

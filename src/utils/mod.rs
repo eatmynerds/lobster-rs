@@ -3,11 +3,14 @@ pub mod fzf;
 pub mod mpv;
 pub mod rofi;
 
-use std::error::Error;
-use std::fmt::{Display, Formatter};
+use std::{
+    error::Error,
+    fmt::{Display, Formatter},
+};
 
 #[derive(Debug)]
 pub enum SpawnError {
+    #[allow(dead_code)]
     IOError(std::io::Error),
 }
 

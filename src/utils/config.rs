@@ -1,9 +1,11 @@
-use crate::{Languages, Provider};
+use crate::{Args, Languages, Provider};
 use anyhow::Context;
 use serde::{Deserialize, Serialize};
-use std::fs::{self, File};
-use std::io::Write;
-use std::path::Path;
+use std::{
+    fs::{self, File},
+    io::Write,
+    path::Path,
+};
 
 #[derive(Deserialize, Serialize, Debug)]
 pub struct Config {
@@ -65,5 +67,39 @@ impl Config {
         let content = std::fs::read_to_string(&config_file_path)
             .with_context(|| format!("Failed to read config file: {:?}", config_file_path))?;
         toml::from_str(&content).context("Failed to parse config.toml")
+    }
+
+    pub fn program_configuration<'a>(args: &'a mut Args, config: &'a mut Self) -> &'a mut Args {
+        args.rofi = if !args.rofi {
+            config.use_external_menu
+        } else {
+            args.rofi
+        };
+
+        args.download = Some(
+            match &args.download {
+                Some(download) => download.as_str(),
+                None => &config.download,
+            }
+            .to_string(),
+        );
+
+        args.provider = Some(match &args.provider {
+            Some(provider) => *provider,
+            None => config.provider,
+        });
+
+        args.language = Some(match &args.language {
+            Some(language) => *language,
+            None => config.subs_language,
+        });
+
+        args.debug = if !args.debug {
+            config.debug
+        } else {
+            args.debug
+        };
+
+        args
     }
 }

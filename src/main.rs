@@ -72,7 +72,7 @@ enum Quality {
 }
 
 #[derive(thiserror::Error, Debug)]
-pub enum StreamError {
+enum StreamError {
     #[error("Failed to parse quality from string: {0}")]
     QualityParseError(#[from] ParseIntError),
 }
@@ -203,62 +203,32 @@ struct Args {
     debug: bool,
 }
 
-fn fzf_launcher(args: FzfArgs) -> String {
+fn fzf_launcher(args: FzfArgs) -> anyhow::Result<String> {
     let mut fzf = Fzf::new();
 
-    let output = fzf.spawn(args).unwrap();
+    let fzf_output = fzf.spawn(args)?;
 
-    String::from_utf8_lossy(&output.stdout).trim().to_string()
+    Ok(String::from_utf8_lossy(&fzf_output.stdout)
+        .trim()
+        .to_string())
 }
 
-fn rofi_launcher(args: RofiArgs) -> String {
+fn rofi_launcher(args: RofiArgs) -> anyhow::Result<String> {
     let mut rofi = Rofi::new();
 
-    let output = rofi.spawn(args).unwrap();
+    let rofi_output = rofi.spawn(args)?;
 
-    String::from_utf8_lossy(&output.stdout).trim().to_string()
+    Ok(String::from_utf8_lossy(&rofi_output.stdout)
+        .trim()
+        .to_string())
 }
 
 fn launcher(rofi: bool, rofi_args: RofiArgs, fzf_args: FzfArgs) -> String {
     if rofi {
-        rofi_launcher(rofi_args)
+        rofi_launcher(rofi_args).expect("Failed to launch rofi")
     } else {
-        fzf_launcher(fzf_args)
+        fzf_launcher(fzf_args).expect("Failed to launch fzf")
     }
-}
-
-fn program_configuration<'a>(args: &'a mut Args, config: &'a mut Config) -> &'a mut Args {
-    args.rofi = if !args.rofi {
-        config.use_external_menu
-    } else {
-        args.rofi
-    };
-
-    args.download = Some(
-        match &args.download {
-            Some(download) => download.as_str(),
-            None => &config.download,
-        }
-        .to_string(),
-    );
-
-    args.provider = Some(match &args.provider {
-        Some(provider) => *provider,
-        None => config.provider,
-    });
-
-    args.language = Some(match &args.language {
-        Some(language) => *language,
-        None => config.subs_language,
-    });
-
-    args.debug = if !args.debug {
-        config.debug
-    } else {
-        args.debug
-    };
-
-    args
 }
 
 #[tokio::main]
@@ -269,7 +239,7 @@ async fn main() -> anyhow::Result<()> {
 
     let mut args = Args::parse();
 
-    let settings = program_configuration(&mut args, &mut config);
+    let settings = Config::program_configuration(&mut args, &mut config);
 
     let query = match &settings.query {
         Some(query) => query.to_string(),
