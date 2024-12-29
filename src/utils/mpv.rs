@@ -92,7 +92,7 @@ mod test {
 
     #[test]
     fn test_mpv_spawn() {
-        let mpv = super::Mpv::new();
+        let mpv = Mpv::new();
 
         let mut child = mpv
             .play(MpvArgs {

@@ -2,6 +2,7 @@ use anyhow::anyhow;
 use clap::{Parser, ValueEnum};
 use lazy_static::lazy_static;
 use reqwest::Client;
+use self_update::cargo_crate_version;
 use serde::{Deserialize, Serialize};
 use std::{
     fmt,
@@ -203,41 +204,60 @@ struct Args {
     debug: bool,
 }
 
-fn fzf_launcher(args: FzfArgs) -> anyhow::Result<String> {
+fn fzf_launcher(args: FzfArgs) -> String {
     let mut fzf = Fzf::new();
 
-    let fzf_output = fzf.spawn(args)?;
-
-    Ok(String::from_utf8_lossy(&fzf_output.stdout)
-        .trim()
-        .to_string())
+    fzf.spawn(args)
+        .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_string())
+        .unwrap_or_else(|e| {
+            eprintln!("Failed to launch fzf: {}", e.to_string());
+            std::process::exit(1)
+        })
 }
 
-fn rofi_launcher(args: RofiArgs) -> anyhow::Result<String> {
+fn rofi_launcher(args: RofiArgs) -> String {
     let mut rofi = Rofi::new();
 
-    let rofi_output = rofi.spawn(args)?;
-
-    Ok(String::from_utf8_lossy(&rofi_output.stdout)
-        .trim()
-        .to_string())
+    rofi.spawn(args)
+        .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_string())
+        .unwrap_or_else(|e| {
+            eprintln!("Failed to launch rofi: {}", e.to_string());
+            std::process::exit(1)
+        })
 }
 
 fn launcher(rofi: bool, rofi_args: RofiArgs, fzf_args: FzfArgs) -> String {
     if rofi {
-        rofi_launcher(rofi_args).expect("Failed to launch rofi")
+        rofi_launcher(rofi_args)
     } else {
-        fzf_launcher(fzf_args).expect("Failed to launch fzf")
+        fzf_launcher(fzf_args)
     }
+}
+
+fn update() -> anyhow::Result<()> {
+    let status = self_update::backends::github::Update::configure()
+        .repo_owner("eatmynerds")
+        .repo_name("lobster-rs")
+        .bin_name("lobster-rs")
+        .show_download_progress(true)
+        .current_version(cargo_crate_version!())
+        .build()?
+        .update()?;
+
+    println!("Update status: `{}`!", status.version());
+
+    Ok(())
 }
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let mut config =
-        Config::load_from_file(std::path::Path::new("~/.config/lobster_rs/config.toml"))
-            .expect("Failed to load config file");
-
     let mut args = Args::parse();
+
+    if args.update {
+        update()?;
+    }
+
+    let mut config = Config::load_config().expect("Failed to load config file");
 
     let settings = Config::program_configuration(&mut args, &mut config);
 

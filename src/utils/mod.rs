@@ -3,21 +3,8 @@ pub mod fzf;
 pub mod mpv;
 pub mod rofi;
 
-use std::{
-    error::Error,
-    fmt::{Display, Formatter},
-};
-
-#[derive(Debug)]
+#[derive(thiserror::Error, Debug)]
 pub enum SpawnError {
-    #[allow(dead_code)]
+    #[error("Failed to spawn process: {0}")]
     IOError(std::io::Error),
-}
-
-impl Error for SpawnError {}
-
-impl Display for SpawnError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.write_str(format!("{:?}", self).as_str())
-    }
 }

@@ -10,6 +10,7 @@ dirs = "5.0.1"
 futures = "0.3.31"
 lazy_static = "1.5.0"
 reqwest = "0.12.9"
+self_update = { version = "0.41.0", features = ["archive-tar", "archive-zip", "compression-flate2", "compression-zip-deflate"] }
 serde = { version = "1.0.216", features = ["derive"] }
 serde_json = "1.0.134"
 thiserror = "2.0.9"

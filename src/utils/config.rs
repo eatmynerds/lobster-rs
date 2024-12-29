@@ -33,48 +33,64 @@ impl Config {
             provider: Provider::Vidcloud,
             history: false,
             subs_language: Languages::English,
-            histfile: String::from("~/.local/share/lobster/lobster_history.txt"),
+            histfile: format!(
+                "{}/lobster/lobster_history.txt",
+                dirs::config_dir()
+                    .expect("Faield to get config dir")
+                    .display()
+            ),
             use_external_menu: false,
             image_preview: false,
             debug: false,
         }
     }
 
-    pub fn load_from_file(file_path: &Path) -> anyhow::Result<Self> {
-        let home_dir = dirs::home_dir().context("Failed to retrieve the home directory")?;
+    pub fn load_config() -> anyhow::Result<Self> {
+        let config_dir = dirs::config_dir().context("Failed to retrieve the config directory")?;
 
-        let config_file_path = home_dir.join(file_path);
-        if !config_file_path.exists() {
+        let config = Config::load_from_file(Path::new(&format!(
+            "{}/lobster/config.toml",
+            config_dir.display()
+        )))?;
+
+        Ok(config)
+    }
+
+    pub fn load_from_file(file_path: &Path) -> anyhow::Result<Self> {
+        if !file_path.exists() {
             let default_config = Config::new();
             let content = toml::to_string(&default_config)
                 .with_context(|| "Failed to serialize the default config")?;
 
-            if let Some(parent) = config_file_path.parent() {
+            if let Some(parent) = file_path.parent() {
                 fs::create_dir_all(parent)
                     .with_context(|| format!("Failed to create config directory: {:?}", parent))?;
             }
 
-            let mut file = File::create(&config_file_path)
-                .with_context(|| format!("Failed to create config file: {:?}", config_file_path))?;
+            let mut file = File::create(&file_path)
+                .with_context(|| format!("Failed to create config file: {:?}", file_path))?;
 
-            file.write_all(content.as_bytes()).with_context(|| {
-                format!("Failed to write to config file: {:?}", config_file_path)
-            })?;
+            file.write_all(content.as_bytes())
+                .with_context(|| format!("Failed to write to config file: {:?}", file_path))?;
 
             return Ok(default_config);
         }
 
-        let content = std::fs::read_to_string(&config_file_path)
-            .with_context(|| format!("Failed to read config file: {:?}", config_file_path))?;
+        let content = std::fs::read_to_string(&file_path)
+            .with_context(|| format!("Failed to read config file: {:?}", file_path))?;
         toml::from_str(&content).context("Failed to parse config.toml")
     }
 
     pub fn program_configuration<'a>(args: &'a mut Args, config: &'a mut Self) -> &'a mut Args {
-        args.rofi = if !args.rofi {
-            config.use_external_menu
+        if cfg!(target_os = "linux") {
+            args.rofi = if !args.rofi {
+                config.use_external_menu
+            } else {
+                args.rofi
+            };
         } else {
-            args.rofi
-        };
+            args.rofi = false;
+        }
 
         args.download = Some(
             match &args.download {
