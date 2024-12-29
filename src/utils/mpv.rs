@@ -55,8 +55,12 @@ impl MpvPlay for Mpv {
             let mut temp_sub_files = String::new();
 
             for sub_file in sub_files {
-                temp_sub_files.push_str(&sub_file.replace(":", r#"\:"#));
-                temp_sub_files.push_str(":");
+                if i == 0 {
+                    temp_sub_files.push_str(&sub_file.replace(":", r#"\:"#));
+                } else {
+                    temp_sub_files.push_str(&sub_file.replace(":", r#"\:"#));
+                    temp_sub_files.push_str(":");
+                }
             }
 
             temp_args.push(format!("--sub-files={}", temp_sub_files));
