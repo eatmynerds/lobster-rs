@@ -7,9 +7,10 @@ use serde::{Deserialize, Serialize};
 use std::{
     fmt::{self, Debug, Display, Formatter},
     num::ParseIntError,
+    process::Command,
     str::FromStr,
 };
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 use tracing_subscriber::filter::Targets;
 use tracing_subscriber::prelude::__tracing_subscriber_SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
@@ -302,15 +303,19 @@ async fn launcher(
             rofi_args.show_icons = true;
             rofi_args.dmenu = false;
         } else {
-            debug!("Setting up fzf preview script.");
+            if std::process::Command::new("chafa").output().is_err() {
+                warn!("Chafa isn't installed. Cannot preview images with fzf.");
+            } else {
+                debug!("Setting up fzf preview script.");
 
-            fzf_args.preview = Some(
-                r#"
-            selected=$(echo {} | cut -f2 | sed 's/\//-/g')
-            chafa -f sixel -s 80x40 "/tmp/images/${selected}.jpg"
-                "#
-                .to_string(),
-            );
+                fzf_args.preview = Some(
+                    r#"
+                selected=$(echo {} | cut -f2 | sed 's/\//-/g')
+                chafa -f sixel -s 80x40 "/tmp/images/${selected}.jpg"
+                    "#
+                    .to_string(),
+                );
+            }
         }
     }
 
@@ -523,6 +528,38 @@ async fn handle_servers(
     Ok(())
 }
 
+fn is_command_available(command: &str) -> bool {
+    let version_arg = if command == "rofi" || command == "ffmpeg" {
+        String::from("-version")
+    } else {
+        String::from("--version")
+    };
+
+    match Command::new(command).arg(version_arg).output() {
+        Ok(output) => output.status.success(),
+        Err(_) => false,
+    }
+}
+
+fn check_dependencies() {
+    let dependencies = if cfg!(target_os = "windows") {
+        vec!["mpv", "ffmpeg", "chafa", "ffmpeg", "fzf"]
+    } else {
+        vec!["mpv", "fzf", "rofi", "ffmpeg", "chafa"]
+    };
+
+    for dep in dependencies {
+        if !is_command_available(dep) {
+            if dep == "chafa" {
+                warn!("Chafa isn't installed. You won't be able to do image previews with fzf.");
+                continue;
+            }
+            error!("{} is missing. Please install it.", dep);
+            std::process::exit(1);
+        }
+    }
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let mut args = Args::parse();
@@ -537,6 +574,8 @@ async fn main() -> anyhow::Result<()> {
         .with(CustomLayer)
         .with(filter)
         .init();
+
+    check_dependencies();
 
     if args.update {
         let update_result = tokio::task::spawn_blocking(move || update()).await?;
