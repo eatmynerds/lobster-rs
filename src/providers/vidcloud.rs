@@ -1,4 +1,5 @@
 use crate::{providers::VideoExtractor, BASE_URL, CLIENT};
+use tracing::{debug, error, info};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -25,6 +26,7 @@ pub struct VidCloud {
 
 impl VidCloud {
     pub fn new() -> Self {
+        info!("Initializing VidCloud instance.");
         Self {
             sources: vec![],
             tracks: vec![],
@@ -36,22 +38,46 @@ impl VidCloud {
 
 impl VideoExtractor for VidCloud {
     async fn extract(&mut self, server_url: &str) -> anyhow::Result<()> {
-        let response = CLIENT
-            .get(format!(
+        let request_url = format!(
             "https://testing-embed-decrypt.harc6r.easypanel.host/embed?embed_url={}&referrer={}",
             server_url, BASE_URL
-        ))
-            .send()
-            .await?
-            .text()
-            .await?;
+        );
 
-        let sources: Self = serde_json::from_str(&response).expect("Failed to serialize sources!");
+        info!("Starting extraction process for URL: {}", server_url);
+        debug!("Constructed request URL: {}", request_url);
 
-        self.sources = sources.sources;
-        self.tracks = sources.tracks;
-        self.t = sources.t;
-        self.server = sources.server;
+        let response = match CLIENT.get(&request_url).send().await {
+            Ok(resp) => {
+                info!("Received response from server.");
+                match resp.text().await {
+                    Ok(text) => text,
+                    Err(e) => {
+                        error!("Failed to read response text: {}", e);
+                        return Err(e.into());
+                    }
+                }
+            }
+            Err(e) => {
+                error!("HTTP request failed: {}", e);
+                return Err(e.into());
+            }
+        };
+
+        debug!("Response received: {}", response);
+
+        match serde_json::from_str::<Self>(&response) {
+            Ok(sources) => {
+                self.sources = sources.sources;
+                self.tracks = sources.tracks;
+                self.t = sources.t;
+                self.server = sources.server;
+                info!("Successfully deserialized response into VidCloud.");
+            }
+            Err(e) => {
+                error!("Failed to deserialize response: {}", e);
+                return Err(e.into());
+            }
+        }
 
         Ok(())
     }

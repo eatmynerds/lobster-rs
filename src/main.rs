@@ -10,6 +10,7 @@ use std::{
     num::ParseIntError,
     str::FromStr,
 };
+use tracing::{error, info, Level};
 
 mod cli;
 use cli::get_input;
@@ -19,6 +20,7 @@ mod providers;
 mod utils;
 use utils::{
     config::Config,
+    ffmpeg::{Ffmpeg, FfmpegArgs, FfmpegSpawn},
     fzf::{Fzf, FzfArgs, FzfSpawn},
     image_preview::{generate_desktop, image_preview, remove_desktop_and_tmp},
     players::{
@@ -209,22 +211,36 @@ struct Args {
 }
 
 fn fzf_launcher<'a>(args: &'a mut FzfArgs) -> String {
+    info!("Launching fzf with arguments: {:?}", args);
+
     let mut fzf = Fzf::new();
 
     fzf.spawn(args)
-        .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_string())
+        .map(|output| {
+            let result = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            info!("fzf completed with result: {}", result);
+            result
+        })
         .unwrap_or_else(|e| {
+            error!("Failed to launch fzf: {}", e.to_string());
             eprintln!("Failed to launch fzf: {}", e.to_string());
             std::process::exit(1)
         })
 }
 
 fn rofi_launcher<'a>(args: &'a mut RofiArgs) -> String {
+    info!("Launching rofi with arguments: {:?}", args);
+
     let mut rofi = Rofi::new();
 
     rofi.spawn(args)
-        .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_string())
+        .map(|output| {
+            let result = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            info!("rofi completed with result: {}", result);
+            result
+        })
         .unwrap_or_else(|e| {
+            error!("Failed to launch rofi: {}", e.to_string());
             eprintln!("Failed to launch rofi: {}", e.to_string());
             std::process::exit(1)
         })
@@ -236,14 +252,25 @@ async fn launcher(
     rofi_args: &mut RofiArgs,
     fzf_args: &mut FzfArgs,
 ) -> String {
-    if image_preview_files.len() == 0 {
+    info!("Starting launcher with rofi: {}", rofi);
+
+    if image_preview_files.is_empty() {
+        info!("No image preview files provided.");
     } else {
+        info!(
+            "Generating image previews for {} files.",
+            image_preview_files.len()
+        );
         let temp_images_dirs = image_preview(image_preview_files)
             .await
             .expect("Failed to generate image previews");
 
         if rofi {
             for (media_name, media_id, image_path) in temp_images_dirs {
+                info!(
+                    "Generating desktop entry for: {} (ID: {})",
+                    media_name, media_id
+                );
                 generate_desktop(media_name, media_id, image_path)
                     .expect("Failed to generate desktop entry for image preview");
             }
@@ -253,6 +280,7 @@ async fn launcher(
             rofi_args.show_icons = true;
             rofi_args.dmenu = false;
         } else {
+            info!("Setting up fzf preview script.");
             fzf_args.preview = Some(
                 r#"
             selected=$(echo {} | cut -f2 | sed 's/\//-/g')
@@ -266,10 +294,43 @@ async fn launcher(
     }
 
     if rofi {
+        info!("Using rofi launcher.");
         rofi_launcher(rofi_args)
     } else {
+        info!("Using fzf launcher.");
         fzf_launcher(fzf_args)
     }
+}
+
+fn download(
+    download_dir: String,
+    media_title: String,
+    url: String,
+    _subtitles: Vec<String>,
+    _subtitle_language: Option<Languages>,
+) {
+    info!(
+        "Starting download for media: {} from URL: {}",
+        media_title, url
+    );
+
+    let mut ffmpeg = Ffmpeg::new();
+
+    let _ = ffmpeg
+        .embed_video(&mut FfmpegArgs {
+            input_file: url,
+            log_level: Some("error".to_string()),
+            stats: true,
+            output_file: format!("{}/{}.mkv", download_dir, media_title),
+            subtitle_files: None,
+            subtitle_language: None,
+            codec: Some("copy".to_string()),
+        })
+        .unwrap_or_else(|e| {
+            error!("Failed to spawn ffmpeg: {}", e);
+            eprintln!("Failed to spawn ffmpeg: {}", e);
+            std::process::exit(1)
+        });
 }
 
 fn update() -> anyhow::Result<()> {
@@ -300,6 +361,14 @@ fn update() -> anyhow::Result<()> {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    tracing_subscriber::fmt()
+        .with_max_level(Level::DEBUG)
+        .with_target(false)
+        .with_thread_names(true)
+        .with_env_filter("debug")
+        .pretty()
+        .init();
+
     let mut args = Args::parse();
 
     if args.update {
@@ -314,9 +383,9 @@ async fn main() -> anyhow::Result<()> {
         }
     }
 
-    let mut config = Config::load_config().expect("Failed to load config file");
+    let config = Config::load_config().expect("Failed to load config file");
 
-    let settings = Config::program_configuration(&mut args, &mut config);
+    let settings = Config::program_configuration(&mut args, &config);
 
     let query = match &settings.query {
         Some(query) => query.to_string(),
@@ -420,10 +489,9 @@ async fn main() -> anyhow::Result<()> {
 
     let media_info = media_choice.split("\t").collect::<Vec<&str>>();
 
-    let image_link = media_info[1];
-    let media_id = media_info[2];
-    let media_type = media_info[3];
-    let media_title = media_info[4].split('[').next().unwrap_or("").trim();
+    let media_id = media_info[1];
+    let media_type = media_info[2];
+    let media_title = media_info[3].split('[').next().unwrap_or("").trim();
 
     if media_type == "tv" {
         let show_info = FlixHQ.info(&media_id).await?;
@@ -534,6 +602,18 @@ async fn main() -> anyhow::Result<()> {
 
                     match config.player.as_str() {
                         "vlc" => {
+                            if let Some(download_dir) = &settings.download {
+                                download(
+                                    download_dir.to_string(),
+                                    media_title.to_string(),
+                                    vidcloud_sources[0].file.to_string(),
+                                    selected_subtitles,
+                                    Some(settings.language.unwrap_or(Languages::English)),
+                                );
+
+                                return Ok(());
+                            }
+
                             let vlc = Vlc::new();
 
                             let mut child = vlc
@@ -552,6 +632,18 @@ async fn main() -> anyhow::Result<()> {
                                 .expect("Failed to spawn child process for vlc.");
                         }
                         "mpv" => {
+                            if let Some(download_dir) = &settings.download {
+                                download(
+                                    download_dir.to_string(),
+                                    media_title.to_string(),
+                                    vidcloud_sources[0].file.to_string(),
+                                    selected_subtitles,
+                                    Some(settings.language.unwrap_or(Languages::English)),
+                                );
+
+                                return Ok(());
+                            }
+
                             let mpv = Mpv::new();
 
                             let mut child = mpv.play(MpvArgs {
@@ -618,6 +710,18 @@ async fn main() -> anyhow::Result<()> {
 
                 match config.player.as_str() {
                     "vlc" => {
+                        if let Some(download_dir) = &settings.download {
+                            download(
+                                download_dir.to_string(),
+                                media_title.to_string(),
+                                vidcloud_sources[0].file.to_string(),
+                                selected_subtitles,
+                                Some(settings.language.unwrap_or(Languages::English)),
+                            );
+
+                            return Ok(());
+                        }
+
                         let vlc = Vlc::new();
 
                         let mut child = vlc
@@ -636,11 +740,21 @@ async fn main() -> anyhow::Result<()> {
                             .expect("Failed to spawn child process for vlc.");
                     }
                     "mpv" => {
+                        if let Some(download_dir) = &settings.download {
+                            download(
+                                download_dir.to_string(),
+                                media_title.to_string(),
+                                vidcloud_sources[0].file.to_string(),
+                                selected_subtitles,
+                                Some(settings.language.unwrap_or(Languages::English)),
+                            );
+
+                            return Ok(());
+                        }
+
                         let mpv = Mpv::new();
 
                         let mut child = mpv.play(MpvArgs {
-                            // (eatmynerds): Play the first source since multiple qualites are not provided
-                            // anymore
                             url: vidcloud_sources[0].file.to_string(),
                             sub_files: Some(selected_subtitles),
                             force_media_title: Some(media_title.to_string()),

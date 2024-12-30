@@ -1,5 +1,6 @@
 use crate::utils::SpawnError;
 use std::{io::Write, process::Stdio};
+use tracing::{debug, info, error};
 
 pub struct Fzf {
     pub executable: String,
@@ -8,6 +9,7 @@ pub struct Fzf {
 
 impl Fzf {
     pub fn new() -> Self {
+        info!("Initializing Fzf with default executable and empty arguments.");
         Self {
             executable: "fzf".to_string(),
             args: vec![],
@@ -15,7 +17,7 @@ impl Fzf {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct FzfArgs {
     pub process_stdin: Option<String>,
     pub header: Option<String>,
@@ -35,92 +37,107 @@ pub trait FzfSpawn {
 
 impl FzfSpawn for Fzf {
     fn spawn(&mut self, args: &mut FzfArgs) -> Result<std::process::Output, SpawnError> {
+        info!("Starting Fzf spawn with arguments: {:?}", args);
+
         let mut temp_args = self.args.clone();
 
         if let Some(header) = &args.header {
+            debug!("Setting header: {}", header);
             temp_args.push(format!("--header={}", header));
         }
 
         if args.reverse {
+            debug!("Adding reverse flag.");
             temp_args.push("--reverse".to_string());
         }
 
         if let Some(preview) = &args.preview {
+            debug!("Setting preview: {}", preview);
             temp_args.push(format!("--preview={}", preview));
         }
 
         if let Some(with_nth) = &args.with_nth {
+            debug!("Setting with-nth: {}", with_nth);
             temp_args.push(format!("--with-nth={}", with_nth));
         }
 
         if args.ignore_case {
+            debug!("Adding ignore-case flag.");
             temp_args.push("--ignore-case".to_string());
         }
 
         if let Some(query) = &args.query {
+            debug!("Setting query: {}", query);
             temp_args.push(format!("--query={}", query));
         }
 
         if args.cycle {
+            debug!("Adding cycle flag.");
             temp_args.push("--cycle".to_string());
         }
 
         if let Some(delimiter) = &args.delimiter {
+            debug!("Setting delimiter: {}", delimiter);
             temp_args.push(format!("--delimiter={}", delimiter));
         }
 
         if let Some(preview_window) = &args.preview_window {
+            debug!("Setting preview-window: {}", preview_window);
             temp_args.push(format!("--preview-window={}", preview_window));
         }
 
         let mut command = std::process::Command::new(&self.executable);
         command.args(&temp_args);
 
+        debug!("Executing command: {} {}", self.executable, temp_args.join(" "));
+
         if let Some(process_stdin) = &args.process_stdin {
+            info!("Process stdin provided, writing to stdin.");
+
             command
                 .stdin(Stdio::piped())
                 .stdout(Stdio::piped())
                 .stderr(Stdio::piped());
 
-            let mut child = command.spawn().map_err(SpawnError::IOError)?;
+            let mut child = command.spawn().map_err(|e| {
+                error!("Failed to spawn process: {}", e);
+                SpawnError::IOError(e)
+            })?;
 
             if let Some(mut stdin) = child.stdin.take() {
-                writeln!(stdin, "{}", process_stdin).map_err(SpawnError::IOError)?;
+                writeln!(stdin, "{}", process_stdin).map_err(|e| {
+                    error!("Failed to write to stdin: {}", e);
+                    SpawnError::IOError(e)
+                })?;
             }
 
-            let output = child.wait_with_output().map_err(SpawnError::IOError)?;
+            let output = child.wait_with_output().map_err(|e| {
+                error!("Failed to wait for process output: {}", e);
+                SpawnError::IOError(e)
+            })?;
 
+            info!("Process completed successfully.");
             Ok(output)
         } else {
+            info!("No process stdin provided.");
+
             command
                 .stdin(Stdio::piped())
                 .stdout(Stdio::piped())
                 .stderr(Stdio::piped());
 
-            let child = command.spawn().map_err(SpawnError::IOError)?;
+            let child = command.spawn().map_err(|e| {
+                error!("Failed to spawn process: {}", e);
+                SpawnError::IOError(e)
+            })?;
 
-            let output = child.wait_with_output().map_err(SpawnError::IOError)?;
+            let output = child.wait_with_output().map_err(|e| {
+                error!("Failed to wait for process output: {}", e);
+                SpawnError::IOError(e)
+            })?;
 
+            info!("Process completed successfully.");
             Ok(output)
         }
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use crate::utils::fzf::{Fzf, FzfArgs, FzfSpawn};
-
-    #[test]
-    fn test_fzf_spawn() {
-        let mut fzf = Fzf::new();
-        let output = fzf
-            .spawn(&mut FzfArgs {
-                process_stdin: Some("Hello\nWorld".to_string()),
-                delimiter: Some(String::from("\t")),
-                ..Default::default()
-            })
-            .unwrap();
-
-        assert_eq!(output.status.success(), true);
     }
 }

@@ -3,6 +3,7 @@ pub mod fzf;
 pub mod rofi;
 pub mod image_preview;
 pub mod players;
+pub mod ffmpeg;
 
 #[derive(thiserror::Error, Debug)]
 pub enum SpawnError {

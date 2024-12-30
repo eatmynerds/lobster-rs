@@ -17,4 +17,6 @@ serde_json = "1.0.134"
 thiserror = "2.0.9"
 tokio = { version = "1.42.0", features = ["full"] }
 toml = "0.8.19"
+tracing = "0.1.41"
+tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
 visdom = "1.0.2"

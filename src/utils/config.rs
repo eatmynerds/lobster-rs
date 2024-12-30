@@ -6,6 +6,7 @@ use std::{
     io::Write,
     path::Path,
 };
+use tracing::{debug, info, warn};
 
 #[derive(Deserialize, Serialize, Debug)]
 pub struct Config {
@@ -22,23 +23,27 @@ pub struct Config {
 
 impl Config {
     pub fn new() -> Self {
-        Config {
+        info!("Creating a new default configuration.");
+        let download_dir = std::env::current_dir()
+            .expect("Failed to get current directory")
+            .to_str()
+            .expect("Failed to convert path to str")
+            .to_string();
+
+        let histfile = format!(
+            "{}/lobster/lobster_history.txt",
+            dirs::config_dir()
+                .expect("Failed to get configuration directory")
+                .display()
+        );
+
+        Self {
             player: String::from("mpv"),
-            download: String::from(
-                std::env::current_dir()
-                    .expect("Failed to get current dir")
-                    .to_str()
-                    .expect("Failed to convert path to str"),
-            ),
+            download: download_dir,
             provider: Provider::Vidcloud,
             history: false,
             subs_language: Languages::English,
-            histfile: format!(
-                "{}/lobster/lobster_history.txt",
-                dirs::config_dir()
-                    .expect("Faield to get config dir")
-                    .display()
-            ),
+            histfile,
             use_external_menu: false,
             image_preview: false,
             debug: false,
@@ -46,24 +51,27 @@ impl Config {
     }
 
     pub fn load_config() -> anyhow::Result<Self> {
+        info!("Loading configuration...");
         let config_dir = dirs::config_dir().context("Failed to retrieve the config directory")?;
 
-        let config = Config::load_from_file(Path::new(&format!(
-            "{}/lobster_rs/config.toml",
-            config_dir.display()
-        )))?;
+        let config_path = format!("{}/lobster_rs/config.toml", config_dir.display());
+        debug!("Looking for config file at path: {}", config_path);
 
+        let config = Config::load_from_file(Path::new(&config_path))?;
+        info!("Configuration loaded successfully.");
         Ok(config)
     }
 
     pub fn load_from_file(file_path: &Path) -> anyhow::Result<Self> {
         if !file_path.exists() {
-            println!("Creating default config file");
+            warn!("Config file not found at {:?}. Creating a default configuration.", file_path);
+
             let default_config = Config::new();
             let content = toml::to_string(&default_config)
-                .with_context(|| "Failed to serialize the default config")?;
+                .with_context(|| "Failed to serialize the default configuration")?;
 
             if let Some(parent) = file_path.parent() {
+                debug!("Creating config directory: {:?}", parent);
                 fs::create_dir_all(parent)
                     .with_context(|| format!("Failed to create config directory: {:?}", parent))?;
             }
@@ -71,29 +79,39 @@ impl Config {
             let mut file = File::create(&file_path)
                 .with_context(|| format!("Failed to create config file: {:?}", file_path))?;
 
+            debug!("Writing default configuration to file.");
             file.write_all(content.as_bytes())
                 .with_context(|| format!("Failed to write to config file: {:?}", file_path))?;
 
+            info!("Default configuration created successfully.");
             return Ok(default_config);
         }
 
-        let content = std::fs::read_to_string(&file_path)
+        debug!("Reading config file from {:?}", file_path);
+        let content = fs::read_to_string(&file_path)
             .with_context(|| format!("Failed to read config file: {:?}", file_path))?;
+
+        debug!("Parsing config file content.");
         toml::from_str(&content).context("Failed to parse config.toml")
     }
 
-    pub fn program_configuration<'a>(args: &'a mut Args, config: &'a mut Self) -> &'a mut Args {
+    pub fn program_configuration<'a>(args: &'a mut Args, config: &Self) -> &'a mut Args {
+        info!("Applying configuration to program arguments.");
+
         if cfg!(target_os = "linux") {
             args.rofi = if !args.rofi {
+                debug!("Setting `rofi` to {}", config.use_external_menu);
                 config.use_external_menu
             } else {
                 args.rofi
             };
         } else {
+            debug!("Disabling `rofi` as it is not supported on this OS.");
             args.rofi = false;
         }
 
         args.image_preview = if !args.image_preview {
+            debug!("Setting `image_preview` to {}", config.image_preview);
             config.image_preview
         } else {
             args.image_preview
@@ -101,28 +119,48 @@ impl Config {
 
         args.download = Some(
             match &args.download {
-                Some(download) => download.as_str(),
-                None => &config.download,
+                Some(download) => {
+                    debug!("Using provided download directory: {}", download);
+                    download.as_str()
+                }
+                None => {
+                    debug!("Using default download directory: {}", config.download);
+                    &config.download
+                }
             }
             .to_string(),
         );
 
         args.provider = Some(match &args.provider {
-            Some(provider) => *provider,
-            None => config.provider,
+            Some(provider) => {
+                debug!("Using provided provider: {:?}", provider);
+                *provider
+            }
+            None => {
+                debug!("Using default provider: {:?}", config.provider);
+                config.provider
+            }
         });
 
         args.language = Some(match &args.language {
-            Some(language) => *language,
-            None => config.subs_language,
+            Some(language) => {
+                debug!("Using provided language: {:?}", language);
+                *language
+            }
+            None => {
+                debug!("Using default language: {:?}", config.subs_language);
+                config.subs_language
+            }
         });
 
         args.debug = if !args.debug {
+            debug!("Setting `debug` to {}", config.debug);
             config.debug
         } else {
             args.debug
         };
 
+        info!("Program arguments configured successfully.");
         args
     }
 }
