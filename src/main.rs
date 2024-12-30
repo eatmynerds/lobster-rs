@@ -52,6 +52,11 @@ impl Display for MediaType {
     }
 }
 
+enum Player {
+    Vlc,
+    Mpv,
+}
+
 #[derive(ValueEnum, Clone, Debug, Serialize, Deserialize, Copy, PartialEq)]
 #[clap(rename_all = "PascalCase")]
 enum Provider {
@@ -155,7 +160,7 @@ struct Args {
 
     /// Downloads movie or episode that is selected (defaults to current directory)
     #[clap(short, long)]
-    download: Option<String>,
+    download: Option<Option<String>>,
 
     /// Enables discord rich presence (beta feature, works fine on Linux)
     #[clap(short, long)]
@@ -215,7 +220,8 @@ fn fzf_launcher<'a>(args: &'a mut FzfArgs) -> String {
 
     let mut fzf = Fzf::new();
 
-    fzf.spawn(args)
+    let output = fzf
+        .spawn(args)
         .map(|output| {
             let result = String::from_utf8_lossy(&output.stdout).trim().to_string();
             info!("fzf completed with result: {}", result);
@@ -223,9 +229,15 @@ fn fzf_launcher<'a>(args: &'a mut FzfArgs) -> String {
         })
         .unwrap_or_else(|e| {
             error!("Failed to launch fzf: {}", e.to_string());
-            eprintln!("Failed to launch fzf: {}", e.to_string());
             std::process::exit(1)
-        })
+        });
+
+    if output.is_empty() {
+        error!("No selection made.");
+        std::process::exit(1)
+    }
+
+    output
 }
 
 fn rofi_launcher<'a>(args: &'a mut RofiArgs) -> String {
@@ -233,7 +245,8 @@ fn rofi_launcher<'a>(args: &'a mut RofiArgs) -> String {
 
     let mut rofi = Rofi::new();
 
-    rofi.spawn(args)
+    let output = rofi
+        .spawn(args)
         .map(|output| {
             let result = String::from_utf8_lossy(&output.stdout).trim().to_string();
             info!("rofi completed with result: {}", result);
@@ -241,9 +254,15 @@ fn rofi_launcher<'a>(args: &'a mut RofiArgs) -> String {
         })
         .unwrap_or_else(|e| {
             error!("Failed to launch rofi: {}", e.to_string());
-            eprintln!("Failed to launch rofi: {}", e.to_string());
             std::process::exit(1)
-        })
+        });
+
+    if output.is_empty() {
+        error!("No selection made.");
+        std::process::exit(1)
+    }
+
+    output
 }
 
 async fn launcher(
@@ -328,7 +347,6 @@ fn download(
         })
         .unwrap_or_else(|e| {
             error!("Failed to spawn ffmpeg: {}", e);
-            eprintln!("Failed to spawn ffmpeg: {}", e);
             std::process::exit(1)
         });
 }
@@ -340,7 +358,7 @@ fn update() -> anyhow::Result<()> {
         "windows" => "lobster-rs-x86_64-windows.exe",
         "linux" => "lobster-rs-x86_64-unknown-linux-gnu",
         _ => {
-            eprintln!("Cannot update: current OS not supported!");
+            error!("Cannot update: current OS not supported!");
             std::process::exit(1)
         }
     };
@@ -354,7 +372,144 @@ fn update() -> anyhow::Result<()> {
         .build()?
         .update()?;
 
-    println!("Update status: `{}`!", status.version());
+    info!("Update status: `{}`!", status.version());
+
+    Ok(())
+}
+
+async fn handle_stream(
+    player: Player,
+    download_dir: Option<String>,
+    url: String,
+    media_title: String,
+    subtitles: Vec<String>,
+    subtitle_language: Option<Languages>,
+) -> anyhow::Result<()> {
+    match player {
+        Player::Vlc => {
+            if let Some(download_dir) = download_dir {
+                download(download_dir, media_title, url, subtitles, subtitle_language);
+
+                return Ok(());
+            }
+
+            let vlc = Vlc::new();
+
+            let mut child = vlc
+                .play(VlcArgs {
+                    url,
+                    input_slave: Some(subtitles),
+                    meta_title: Some(media_title),
+                    ..Default::default()
+                })
+                .unwrap();
+
+            child
+                .wait()
+                .expect("Failed to spawn child process for vlc.");
+        }
+        Player::Mpv => {
+            let mpv = Mpv::new();
+
+            let mut child = mpv.play(MpvArgs {
+                url,
+                sub_files: Some(subtitles),
+                force_media_title: Some(media_title),
+                ..Default::default()
+            })?;
+
+            child
+                .wait()
+                .expect("Failed to spawn child process for mpv.");
+        }
+    }
+
+    Ok(())
+}
+
+async fn handle_servers(
+    config: Config,
+    settings: &mut Args,
+    episode_id: &str,
+    media_id: &str,
+    media_title: &str,
+) -> anyhow::Result<()> {
+    let server_results = FlixHQ.servers(episode_id, media_id).await?;
+
+    let mut servers: Vec<Provider> = vec![];
+
+    for server_result in server_results.servers {
+        let provider = match server_result.name.as_str() {
+            "Vidcloud" => Provider::Vidcloud,
+            "Upcloud" => Provider::Upcloud,
+            _ => continue,
+        };
+        servers.push(provider);
+    }
+
+    let server_choice = settings.provider.unwrap_or(Provider::Vidcloud);
+
+    let server = servers
+        .iter()
+        .find(|&&x| x == server_choice)
+        .unwrap_or(&Provider::Vidcloud);
+
+    let sources = FlixHQ.sources(episode_id, media_id, *server).await?;
+
+    match (sources.sources, sources.subtitles) {
+        (
+            FlixHQSourceType::VidCloud(vidcloud_sources),
+            FlixHQSubtitles::VidCloud(vidcloud_subtitles),
+        ) => {
+            let mut selected_subtitles: Vec<String> = vec![];
+
+            for subtitle in &vidcloud_subtitles {
+                if subtitle
+                    .label
+                    .contains(&settings.language.unwrap_or(Languages::English).to_string())
+                {
+                    selected_subtitles.push(subtitle.file.to_string());
+                }
+            }
+
+            match config.player.as_str() {
+                "vlc" => {
+                    handle_stream(
+                        Player::Vlc,
+                        settings
+                            .download
+                            .as_ref()
+                            .and_then(|inner| inner.as_ref())
+                            .cloned(),
+                        vidcloud_sources[0].file.to_string(),
+                        media_title.to_string(),
+                        selected_subtitles,
+                        Some(settings.language.unwrap_or(Languages::English)),
+                    )
+                    .await?;
+                }
+                "mpv" => {
+                    handle_stream(
+                        Player::Mpv,
+                        settings
+                            .download
+                            .as_ref()
+                            .and_then(|inner| inner.as_ref())
+                            .cloned(),
+                        vidcloud_sources[0].file.to_string(),
+                        media_title.to_string(),
+                        selected_subtitles,
+                        Some(settings.language.unwrap_or(Languages::English)),
+                    )
+                    .await?;
+                }
+                _ => {
+                    error!("Player not supported");
+                    std::process::exit(1)
+                }
+            }
+        }
+    }
 
     Ok(())
 }
@@ -365,7 +520,8 @@ async fn main() -> anyhow::Result<()> {
         .with_max_level(Level::DEBUG)
         .with_target(false)
         .with_thread_names(true)
-        .with_env_filter("debug")
+        .with_env_filter("lobster_rs=debug")
+        .with_env_filter("none")
         .pretty()
         .init();
 
@@ -377,7 +533,7 @@ async fn main() -> anyhow::Result<()> {
         match update_result {
             Ok(_) => {}
             Err(e) => {
-                eprintln!("{}", e);
+                error!("Failed to update: {}", e);
                 std::process::exit(1)
             }
         }
@@ -562,216 +718,12 @@ async fn main() -> anyhow::Result<()> {
 
             let episode_id = &tv.seasons.episodes[season_number - 1][episode_number - 1].id;
 
-            let server_results = FlixHQ.servers(episode_id, media_id).await?;
-
-            let mut servers: Vec<Provider> = vec![];
-
-            for server_result in server_results.servers {
-                let provider = match server_result.name.as_str() {
-                    "Vidcloud" => Provider::Vidcloud,
-                    "Upcloud" => Provider::Upcloud,
-                    _ => continue,
-                };
-                servers.push(provider);
-            }
-
-            let server_choice = settings.provider.unwrap_or(Provider::Vidcloud);
-
-            let server = servers
-                .iter()
-                .find(|&&x| x == server_choice)
-                .unwrap_or(&Provider::Vidcloud);
-
-            let sources = FlixHQ.sources(episode_id, media_id, *server).await?;
-
-            match (sources.sources, sources.subtitles) {
-                (
-                    FlixHQSourceType::VidCloud(vidcloud_sources),
-                    FlixHQSubtitles::VidCloud(vidcloud_subtitles),
-                ) => {
-                    let mut selected_subtitles: Vec<String> = vec![];
-
-                    for subtitle in &vidcloud_subtitles {
-                        if subtitle
-                            .label
-                            .contains(&settings.language.unwrap_or(Languages::English).to_string())
-                        {
-                            selected_subtitles.push(subtitle.file.to_string());
-                        }
-                    }
-
-                    match config.player.as_str() {
-                        "vlc" => {
-                            if let Some(download_dir) = &settings.download {
-                                download(
-                                    download_dir.to_string(),
-                                    media_title.to_string(),
-                                    vidcloud_sources[0].file.to_string(),
-                                    selected_subtitles,
-                                    Some(settings.language.unwrap_or(Languages::English)),
-                                );
-
-                                return Ok(());
-                            }
-
-                            let vlc = Vlc::new();
-
-                            let mut child = vlc
-                                .play(VlcArgs {
-                                    // (eatmynerds): Play the first source since multiple qualites are not provided
-                                    // anymore
-                                    url: vidcloud_sources[0].file.to_string(),
-                                    input_slave: Some(selected_subtitles),
-                                    meta_title: Some(media_title.to_string()),
-                                    ..Default::default()
-                                })
-                                .unwrap();
-
-                            child
-                                .wait()
-                                .expect("Failed to spawn child process for vlc.");
-                        }
-                        "mpv" => {
-                            if let Some(download_dir) = &settings.download {
-                                download(
-                                    download_dir.to_string(),
-                                    media_title.to_string(),
-                                    vidcloud_sources[0].file.to_string(),
-                                    selected_subtitles,
-                                    Some(settings.language.unwrap_or(Languages::English)),
-                                );
-
-                                return Ok(());
-                            }
-
-                            let mpv = Mpv::new();
-
-                            let mut child = mpv.play(MpvArgs {
-                                // (eatmynerds): Play the first source since multiple qualites are not provided
-                                // anymore
-                                url: vidcloud_sources[0].file.to_string(),
-                                sub_files: Some(selected_subtitles),
-                                force_media_title: Some(media_title.to_string()),
-                                ..Default::default()
-                            })?;
-
-                            child
-                                .wait()
-                                .expect("Failed to spawn child process for mpv.");
-                        }
-                        _ => {
-                            eprintln!("Player not supported");
-                            std::process::exit(1)
-                        }
-                    }
-                }
-            }
+            handle_servers(config, settings, episode_id, media_id, media_title).await?;
         }
     } else {
         let episode_id = &media_id.rsplit("-").collect::<Vec<&str>>()[0];
 
-        let server_results = FlixHQ.servers(episode_id, media_id).await?;
-
-        let mut servers: Vec<Provider> = vec![];
-
-        for server_result in server_results.servers {
-            let provider = match server_result.name.as_str() {
-                "Vidcloud" => Provider::Vidcloud,
-                "Upcloud" => Provider::Upcloud,
-                _ => continue,
-            };
-            servers.push(provider);
-        }
-
-        let server_choice = settings.provider.unwrap_or(Provider::Vidcloud);
-
-        let server = servers
-            .iter()
-            .find(|&&x| x == server_choice)
-            .unwrap_or(&Provider::Vidcloud);
-
-        let sources = FlixHQ.sources(episode_id, media_id, *server).await?;
-
-        match (sources.sources, sources.subtitles) {
-            (
-                FlixHQSourceType::VidCloud(vidcloud_sources),
-                FlixHQSubtitles::VidCloud(vidcloud_subtitles),
-            ) => {
-                let mut selected_subtitles: Vec<String> = vec![];
-
-                for subtitle in &vidcloud_subtitles {
-                    if subtitle
-                        .label
-                        .contains(&settings.language.unwrap_or(Languages::English).to_string())
-                    {
-                        selected_subtitles.push(subtitle.file.to_string());
-                    }
-                }
-
-                match config.player.as_str() {
-                    "vlc" => {
-                        if let Some(download_dir) = &settings.download {
-                            download(
-                                download_dir.to_string(),
-                                media_title.to_string(),
-                                vidcloud_sources[0].file.to_string(),
-                                selected_subtitles,
-                                Some(settings.language.unwrap_or(Languages::English)),
-                            );
-
-                            return Ok(());
-                        }
-
-                        let vlc = Vlc::new();
-
-                        let mut child = vlc
-                            .play(VlcArgs {
-                                // (eatmynerds): Play the first source since multiple qualites are not provided
-                                // anymore
-                                url: vidcloud_sources[0].file.to_string(),
-                                input_slave: Some(selected_subtitles),
-                                meta_title: Some(media_title.to_string()),
-                                ..Default::default()
-                            })
-                            .unwrap();
-
-                        child
-                            .wait()
-                            .expect("Failed to spawn child process for vlc.");
-                    }
-                    "mpv" => {
-                        if let Some(download_dir) = &settings.download {
-                            download(
-                                download_dir.to_string(),
-                                media_title.to_string(),
-                                vidcloud_sources[0].file.to_string(),
-                                selected_subtitles,
-                                Some(settings.language.unwrap_or(Languages::English)),
-                            );
-
-                            return Ok(());
-                        }
-
-                        let mpv = Mpv::new();
-
-                        let mut child = mpv.play(MpvArgs {
-                            url: vidcloud_sources[0].file.to_string(),
-                            sub_files: Some(selected_subtitles),
-                            force_media_title: Some(media_title.to_string()),
-                            ..Default::default()
-                        })?;
-
-                        child
-                            .wait()
-                            .expect("Failed to spawn child process for mpv.");
-                    }
-                    _ => {
-                        eprintln!("Player not supported");
-                        std::process::exit(1)
-                    }
-                }
-            }
-        }
+        handle_servers(config, settings, episode_id, media_id, media_title).await?;
     }
 
     Ok(())

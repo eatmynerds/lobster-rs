@@ -64,7 +64,10 @@ impl Config {
 
     pub fn load_from_file(file_path: &Path) -> anyhow::Result<Self> {
         if !file_path.exists() {
-            warn!("Config file not found at {:?}. Creating a default configuration.", file_path);
+            warn!(
+                "Config file not found at {:?}. Creating a default configuration.",
+                file_path
+            );
 
             let default_config = Config::new();
             let content = toml::to_string(&default_config)
@@ -117,19 +120,15 @@ impl Config {
             args.image_preview
         };
 
-        args.download = Some(
-            match &args.download {
-                Some(download) => {
-                    debug!("Using provided download directory: {}", download);
-                    download.as_str()
-                }
-                None => {
-                    debug!("Using default download directory: {}", config.download);
-                    &config.download
-                }
+        args.download = args.download.as_ref().map(|download| {
+            if download.is_some() {
+                debug!("Using provided download directory: {:?}", download);
+            } else {
+                warn!("Provided download directory is empty. Using default download directory.");
+                debug!("Using default download directory: {:?}", config.download);
             }
-            .to_string(),
-        );
+            Some(download.clone().unwrap_or_else(|| config.download.clone()))
+        });
 
         args.provider = Some(match &args.provider {
             Some(provider) => {

@@ -47,6 +47,10 @@ pub fn get_input(rofi: bool) -> anyhow::Result<String> {
         match io::stdin().read_line(&mut input) {
             Ok(_) => {
                 let result = input.trim().to_string();
+                if result.is_empty() {
+                    error!("User input is empty.");
+                    return Err(anyhow::anyhow!("User input is empty."));
+                }
                 debug!("User entered input: {}", result);
                 Ok(result)
             }
