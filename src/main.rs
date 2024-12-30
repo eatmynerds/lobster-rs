@@ -300,6 +300,7 @@ async fn launcher(
             rofi_args.dmenu = false;
         } else {
             info!("Setting up fzf preview script.");
+
             fzf_args.preview = Some(
                 r#"
             selected=$(echo {} | cut -f2 | sed 's/\//-/g')
@@ -307,8 +308,6 @@ async fn launcher(
                 "#
                 .to_string(),
             );
-
-            fzf_args.cycle = true;
         }
     }
 
@@ -317,6 +316,7 @@ async fn launcher(
         rofi_launcher(rofi_args)
     } else {
         info!("Using fzf launcher.");
+        println!("{:#?}", fzf_args);
         fzf_launcher(fzf_args)
     }
 }
