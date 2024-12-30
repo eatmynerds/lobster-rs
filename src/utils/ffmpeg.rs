@@ -1,5 +1,5 @@
 use crate::utils::SpawnError;
-use tracing::{debug, error, info};
+use tracing::{debug, error};
 
 pub struct Ffmpeg {
     pub executable: String,
@@ -8,7 +8,7 @@ pub struct Ffmpeg {
 
 impl Ffmpeg {
     pub fn new() -> Self {
-        info!("Initializing Ffmpeg with default executable and empty arguments.");
+        debug!("Initializing new ffmpeg instance.");
         Self {
             executable: "ffmpeg".to_string(),
             args: vec![],
@@ -33,7 +33,7 @@ pub trait FfmpegSpawn {
 
 impl FfmpegSpawn for Ffmpeg {
     fn embed_video(&mut self, args: &mut FfmpegArgs) -> Result<std::process::Output, SpawnError> {
-        info!("Starting embed_video with input file: {}", args.input_file);
+        debug!("Starting embed_video with input file: {}", args.input_file);
 
         let mut temp_args = self.args.clone();
 
@@ -53,7 +53,7 @@ impl FfmpegSpawn for Ffmpeg {
 
         if let Some(subtitle_files) = args.subtitle_files {
             let subtitle_count = subtitle_files.len();
-            info!("Embedding {} subtitle files.", subtitle_count);
+            debug!("Embedding {} subtitle files.", subtitle_count);
 
             if subtitle_count > 1 {
                 for subtitle_file in subtitle_files {
@@ -96,13 +96,13 @@ impl FfmpegSpawn for Ffmpeg {
         }
 
         if let Some(codec) = &args.codec {
-            info!("Setting codec to: {}", codec);
+            debug!("Setting codec to: {}", codec);
             temp_args.push("-c".to_string());
             temp_args.push(codec.to_string());
         }
 
         temp_args.push(args.output_file.to_owned());
-        info!("Output file set to: {}", args.output_file);
+        debug!("Output file set to: {}", args.output_file);
 
         let mut command = std::process::Command::new(&self.executable);
         debug!(
@@ -115,7 +115,7 @@ impl FfmpegSpawn for Ffmpeg {
         match command.spawn() {
             Ok(child) => match child.wait_with_output() {
                 Ok(output) => {
-                    info!("Command executed successfully.");
+                    debug!("Command executed successfully.");
                     Ok(output)
                 }
                 Err(err) => {

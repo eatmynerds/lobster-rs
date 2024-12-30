@@ -5,12 +5,14 @@ use reqwest::Client;
 use self_update::cargo_crate_version;
 use serde::{Deserialize, Serialize};
 use std::{
-    fmt,
-    fmt::{Display, Formatter},
+    fmt::{self, Debug, Display, Formatter},
     num::ParseIntError,
     str::FromStr,
 };
-use tracing::{error, info, Level};
+use tracing::{debug, error, info};
+use tracing_subscriber::filter::Targets;
+use tracing_subscriber::prelude::__tracing_subscriber_SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
 
 mod cli;
 use cli::get_input;
@@ -23,6 +25,7 @@ use utils::{
     ffmpeg::{Ffmpeg, FfmpegArgs, FfmpegSpawn},
     fzf::{Fzf, FzfArgs, FzfSpawn},
     image_preview::{generate_desktop, image_preview, remove_desktop_and_tmp},
+    logging::CustomLayer,
     players::{
         mpv::{Mpv, MpvArgs, MpvPlay},
         vlc::{Vlc, VlcArgs, VlcPlay},
@@ -216,7 +219,7 @@ struct Args {
 }
 
 fn fzf_launcher<'a>(args: &'a mut FzfArgs) -> String {
-    info!("Launching fzf with arguments: {:?}", args);
+    debug!("Launching fzf with arguments: {:?}", args);
 
     let mut fzf = Fzf::new();
 
@@ -224,7 +227,7 @@ fn fzf_launcher<'a>(args: &'a mut FzfArgs) -> String {
         .spawn(args)
         .map(|output| {
             let result = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            info!("fzf completed with result: {}", result);
+            debug!("fzf completed with result: {}", result);
             result
         })
         .unwrap_or_else(|e| {
@@ -233,7 +236,7 @@ fn fzf_launcher<'a>(args: &'a mut FzfArgs) -> String {
         });
 
     if output.is_empty() {
-        error!("No selection made.");
+        error!("No selection made. Exiting...");
         std::process::exit(1)
     }
 
@@ -241,7 +244,7 @@ fn fzf_launcher<'a>(args: &'a mut FzfArgs) -> String {
 }
 
 fn rofi_launcher<'a>(args: &'a mut RofiArgs) -> String {
-    info!("Launching rofi with arguments: {:?}", args);
+    debug!("Launching rofi with arguments: {:?}", args);
 
     let mut rofi = Rofi::new();
 
@@ -249,7 +252,7 @@ fn rofi_launcher<'a>(args: &'a mut RofiArgs) -> String {
         .spawn(args)
         .map(|output| {
             let result = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            info!("rofi completed with result: {}", result);
+            debug!("rofi completed with result: {}", result);
             result
         })
         .unwrap_or_else(|e| {
@@ -258,7 +261,7 @@ fn rofi_launcher<'a>(args: &'a mut RofiArgs) -> String {
         });
 
     if output.is_empty() {
-        error!("No selection made.");
+        error!("No selection made. Exiting...");
         std::process::exit(1)
     }
 
@@ -271,12 +274,12 @@ async fn launcher(
     rofi_args: &mut RofiArgs,
     fzf_args: &mut FzfArgs,
 ) -> String {
-    info!("Starting launcher with rofi: {}", rofi);
+    debug!("Starting launcher with rofi: {}", rofi);
 
     if image_preview_files.is_empty() {
-        info!("No image preview files provided.");
+        debug!("No image preview files provided.");
     } else {
-        info!(
+        debug!(
             "Generating image previews for {} files.",
             image_preview_files.len()
         );
@@ -286,7 +289,7 @@ async fn launcher(
 
         if rofi {
             for (media_name, media_id, image_path) in temp_images_dirs {
-                info!(
+                debug!(
                     "Generating desktop entry for: {} (ID: {})",
                     media_name, media_id
                 );
@@ -299,7 +302,7 @@ async fn launcher(
             rofi_args.show_icons = true;
             rofi_args.dmenu = false;
         } else {
-            info!("Setting up fzf preview script.");
+            debug!("Setting up fzf preview script.");
 
             fzf_args.preview = Some(
                 r#"
@@ -312,11 +315,10 @@ async fn launcher(
     }
 
     if rofi {
-        info!("Using rofi launcher.");
+        debug!("Using rofi launcher.");
         rofi_launcher(rofi_args)
     } else {
-        info!("Using fzf launcher.");
-        println!("{:#?}", fzf_args);
+        debug!("Using fzf launcher.");
         fzf_launcher(fzf_args)
     }
 }
@@ -328,10 +330,7 @@ fn download(
     _subtitles: Vec<String>,
     _subtitle_language: Option<Languages>,
 ) {
-    info!(
-        "Starting download for media: {} from URL: {}",
-        media_title, url
-    );
+    info!("Starting download for {}.", media_title);
 
     let mut ffmpeg = Ffmpeg::new();
 
@@ -390,6 +389,8 @@ async fn handle_stream(
             if let Some(download_dir) = download_dir {
                 download(download_dir, media_title, url, subtitles, subtitle_language);
 
+                info!("Download completed. Exiting...");
+
                 return Ok(());
             }
 
@@ -409,6 +410,14 @@ async fn handle_stream(
                 .expect("Failed to spawn child process for vlc.");
         }
         Player::Mpv => {
+            if let Some(download_dir) = download_dir {
+                download(download_dir, media_title, url, subtitles, subtitle_language);
+
+                info!("Download completed. Exiting...");
+
+                return Ok(());
+            }
+
             let mpv = Mpv::new();
 
             let mut child = mpv.play(MpvArgs {
@@ -516,16 +525,18 @@ async fn handle_servers(
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    tracing_subscriber::fmt()
-        .with_max_level(Level::DEBUG)
-        .with_target(false)
-        .with_thread_names(true)
-        .with_env_filter("lobster_rs=debug")
-        .with_env_filter("none")
-        .pretty()
-        .init();
-
     let mut args = Args::parse();
+
+    let filter = if args.debug {
+        Targets::from_str("lobster_rs=debug").unwrap()
+    } else {
+        Targets::from_str("lobster_rs=info").unwrap()
+    };
+
+    tracing_subscriber::registry()
+        .with(CustomLayer)
+        .with(filter)
+        .init();
 
     if args.update {
         let update_result = tokio::task::spawn_blocking(move || update()).await?;
@@ -644,7 +655,6 @@ async fn main() -> anyhow::Result<()> {
     }
 
     let media_info = media_choice.split("\t").collect::<Vec<&str>>();
-
     let media_id = media_info[1];
     let media_type = media_info[2];
     let media_title = media_info[3].split('[').next().unwrap_or("").trim();
@@ -709,14 +719,17 @@ async fn main() -> anyhow::Result<()> {
             )
             .await;
 
-            let episode_number = episode_choice
-                .strip_prefix("Eps ")
-                .and_then(|s| s.split(':').next())
-                .unwrap_or("1")
-                .trim()
-                .parse::<usize>()?;
+            let episode_choices = &tv.seasons.episodes[season_number - 1];
 
-            let episode_id = &tv.seasons.episodes[season_number - 1][episode_number - 1].id;
+            let result_index = episode_choices
+                .iter()
+                .position(|episode| episode.title == episode_choice)
+                .unwrap_or_else(|| {
+                    error!("Invalid episode choice: '{}'", episode_choice);
+                    std::process::exit(1)
+                });
+
+            let episode_id = &tv.seasons.episodes[season_number - 1][result_index].id;
 
             handle_servers(config, settings, episode_id, media_id, media_title).await?;
         }

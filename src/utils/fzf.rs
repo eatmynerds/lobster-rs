@@ -1,6 +1,6 @@
 use crate::utils::SpawnError;
 use std::{io::Write, process::Stdio};
-use tracing::{debug, info, error};
+use tracing::{debug, error};
 
 pub struct Fzf {
     pub executable: String,
@@ -9,7 +9,7 @@ pub struct Fzf {
 
 impl Fzf {
     pub fn new() -> Self {
-        info!("Initializing Fzf with default executable and empty arguments.");
+        debug!("Initializing new Fzf instance.");
         Self {
             executable: "fzf".to_string(),
             args: vec![],
@@ -37,7 +37,7 @@ pub trait FzfSpawn {
 
 impl FzfSpawn for Fzf {
     fn spawn(&mut self, args: &mut FzfArgs) -> Result<std::process::Output, SpawnError> {
-        info!("Starting Fzf spawn with arguments: {:?}", args);
+        debug!("Starting Fzf spawn with arguments: {:?}", args);
 
         let mut temp_args = self.args.clone();
 
@@ -92,7 +92,7 @@ impl FzfSpawn for Fzf {
         debug!("Executing command: {} {}", self.executable, temp_args.join(" "));
 
         if let Some(process_stdin) = &args.process_stdin {
-            info!("Process stdin provided, writing to stdin.");
+            debug!("Process stdin provided, writing to stdin.");
 
             command
                 .stdin(Stdio::piped())
@@ -116,10 +116,10 @@ impl FzfSpawn for Fzf {
                 SpawnError::IOError(e)
             })?;
 
-            info!("Process completed successfully.");
+            debug!("Process completed successfully.");
             Ok(output)
         } else {
-            info!("No process stdin provided.");
+            debug!("No process stdin provided.");
 
             command
                 .stdin(Stdio::piped())
@@ -136,7 +136,7 @@ impl FzfSpawn for Fzf {
                 SpawnError::IOError(e)
             })?;
 
-            info!("Process completed successfully.");
+            debug!("Process completed successfully.");
             Ok(output)
         }
     }

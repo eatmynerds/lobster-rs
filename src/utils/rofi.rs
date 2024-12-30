@@ -1,5 +1,5 @@
 use crate::utils::SpawnError;
-use tracing::{debug, error, info};
+use tracing::{debug, error};
 use std::io::Write;
 
 pub struct Rofi {
@@ -9,7 +9,7 @@ pub struct Rofi {
 
 impl Rofi {
     pub fn new() -> Self {
-        info!("Initializing new Rofi instance.");
+        debug!("Initializing new Rofi instance.");
         Self {
             executable: "rofi".to_string(),
             args: vec![],
@@ -124,7 +124,7 @@ impl RofiSpawn for Rofi {
         debug!("Constructed command: {:?}", command);
 
         if let Some(process_stdin) = &args.process_stdin {
-            info!("Spawning Rofi process with stdin.");
+            debug!("Spawning Rofi process with stdin.");
             command
                 .stdin(std::process::Stdio::piped())
                 .stdout(std::process::Stdio::piped())
@@ -148,10 +148,10 @@ impl RofiSpawn for Rofi {
                 SpawnError::IOError(e)
             })?;
 
-            info!("Rofi process completed successfully.");
+            debug!("Rofi process completed successfully.");
             Ok(output)
         } else {
-            info!("Spawning Rofi process without stdin.");
+            debug!("Spawning Rofi process without stdin.");
             command
                 .stdin(std::process::Stdio::piped())
                 .stdout(std::process::Stdio::piped())
@@ -167,7 +167,7 @@ impl RofiSpawn for Rofi {
                 SpawnError::IOError(e)
             })?;
 
-            info!("Rofi process completed successfully.");
+            debug!("Rofi process completed successfully.");
             Ok(output)
         }
     }

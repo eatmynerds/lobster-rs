@@ -1,5 +1,5 @@
 use crate::utils::SpawnError;
-use tracing::{info, error, debug};
+use tracing::{debug, error};
 
 pub struct Mpv {
     pub executable: String,
@@ -8,7 +8,7 @@ pub struct Mpv {
 
 impl Mpv {
     pub fn new() -> Self {
-        info!("Initializing Mpv struct");
+        debug!("Initializing new mpv instance.");
         Self {
             executable: "mpv".to_string(),
             args: vec![],
@@ -37,18 +37,18 @@ pub trait MpvPlay {
 
 impl MpvPlay for Mpv {
     fn play(&self, args: MpvArgs) -> Result<std::process::Child, SpawnError> {
-        info!("Preparing to play video with URL: {}", args.url);
+        debug!("Preparing to play video with URL: {}", args.url);
 
         let mut temp_args = self.args.clone();
         temp_args.push(args.url.clone());
 
         if args.quiet {
-            info!("Adding quiet flag");
+            debug!("Adding quiet flag");
             temp_args.push(String::from("--quiet"));
         }
 
         if args.really_quiet {
-            info!("Adding really quiet flag");
+            debug!("Adding really quiet flag");
             temp_args.push(String::from("--really-quiet"));
         }
 
@@ -74,12 +74,12 @@ impl MpvPlay for Mpv {
         }
 
         if args.save_position_on_quit {
-            info!("Adding save position on quit flag");
+            debug!("Adding save position on quit flag");
             temp_args.push(String::from("--save-position-on-quit"));
         }
 
         if args.write_filename_in_watch_later_config {
-            info!("Adding write filename in watch later config flag");
+            debug!("Adding write filename in watch later config flag");
             temp_args.push(String::from("--write-filename-in-watch-later-config"));
         }
 
@@ -103,7 +103,7 @@ impl MpvPlay for Mpv {
             temp_args.push(format!("--force-media-title={}", force_media_title));
         }
 
-        info!("Executing mpv command: {} {:?}", self.executable, temp_args);
+        debug!("Executing mpv command: {} {:?}", self.executable, temp_args);
 
         std::process::Command::new(&self.executable)
             .args(temp_args)
@@ -112,35 +112,5 @@ impl MpvPlay for Mpv {
                 error!("Failed to spawn mpv process: {}", e);
                 SpawnError::IOError(e)
             })
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use crate::utils::players::mpv::{Mpv, MpvArgs, MpvPlay};
-    use log::LevelFilter;
-    use env_logger;
-
-    #[test]
-    fn test_mpv_spawn() {
-        // Initialize logger for tests
-        env_logger::builder().filter_level(LevelFilter::Info).init();
-
-        let mpv = Mpv::new();
-
-        let mut child = mpv
-            .play(MpvArgs {
-                url: String::from("https://www.youtube.com/watch?v=sNHzizPu7yQ&t=1s"),
-                ..Default::default()
-            })
-            .unwrap();
-
-        assert_eq!(
-            child
-                .wait()
-                .expect("Failed to spawn child process for mpv.")
-                .code(),
-            Some(0)
-        )
     }
 }

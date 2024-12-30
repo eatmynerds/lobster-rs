@@ -1,10 +1,10 @@
 use crate::utils::rofi::{Rofi, RofiArgs, RofiSpawn};
 use std::{io, io::Write};
-use tracing::{debug, error, info};
+use tracing::{debug, error};
 
 pub fn get_input(rofi: bool) -> anyhow::Result<String> {
     if rofi {
-        info!("Using Rofi interface for input.");
+        debug!("Using Rofi interface for input.");
 
         let mut rofi = Rofi::new();
         debug!("Initializing Rofi with arguments.");
@@ -19,7 +19,7 @@ pub fn get_input(rofi: bool) -> anyhow::Result<String> {
             ..Default::default()
         }) {
             Ok(output) => {
-                info!("Rofi command executed successfully.");
+                debug!("Rofi command executed successfully.");
                 output
             }
             Err(e) => {
@@ -35,7 +35,7 @@ pub fn get_input(rofi: bool) -> anyhow::Result<String> {
         debug!("Rofi returned input: {}", result);
         Ok(result)
     } else {
-        info!("Using terminal input for input.");
+        debug!("Using terminal input for input.");
 
         print!("Search Movie/TV Show: ");
         if let Err(e) = io::stdout().flush() {

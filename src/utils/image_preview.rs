@@ -1,12 +1,12 @@
 use crate::CLIENT;
-use tracing::{debug, error, info};
+use tracing::{debug, error};
 
 pub fn generate_desktop(
     media_title: String,
     media_id: String,
     image_path: String,
 ) -> anyhow::Result<()> {
-    info!("Generating desktop entry for media_id: {}", media_id);
+    debug!("Generating desktop entry for media_id: {}", media_id);
 
     let desktop_entry = String::from(format!(
         r#"[Desktop Entry]
@@ -23,7 +23,7 @@ Categories=imagepreview;"#,
         .join(".local/share/applications/imagepreview");
 
     if !image_preview_dir.exists() {
-        info!("Creating directory: {:?}", image_preview_dir);
+        debug!("Creating directory: {:?}", image_preview_dir);
         std::fs::create_dir(&image_preview_dir)?;
     }
 
@@ -32,13 +32,13 @@ Categories=imagepreview;"#,
     debug!("Writing desktop entry to file: {:?}", desktop_file);
     std::fs::write(&desktop_file, desktop_entry)?;
 
-    info!("Desktop entry generated successfully for media_id: {}", media_id);
+    debug!("Desktop entry generated successfully for media_id: {}", media_id);
 
     Ok(())
 }
 
 pub fn remove_desktop_and_tmp(media_id: String) -> anyhow::Result<()> {
-    info!("Removing desktop entry and temporary files for media_id: {}", media_id);
+    debug!("Removing desktop entry and temporary files for media_id: {}", media_id);
 
     let image_preview_dir = dirs::home_dir()
         .expect("Failed to get home directory")
@@ -47,20 +47,20 @@ pub fn remove_desktop_and_tmp(media_id: String) -> anyhow::Result<()> {
     let desktop_file = image_preview_dir.join(format!("{}.desktop", media_id.replace("/", "-")));
 
     if desktop_file.exists() {
-        info!("Removing desktop file: {:?}", desktop_file);
+        debug!("Removing desktop file: {:?}", desktop_file);
         std::fs::remove_file(&desktop_file)?;
     } else {
         debug!("Desktop file does not exist: {:?}", desktop_file);
     }
 
     if std::fs::metadata("/tmp/images").is_ok() {
-        info!("Removing temporary images directory: /tmp/images");
+        debug!("Removing temporary images directory: /tmp/images");
         std::fs::remove_dir_all("/tmp/images")?;
     } else {
         debug!("Temporary images directory does not exist: /tmp/images");
     }
 
-    info!("Desktop entry and temporary files removed successfully for media_id: {}", media_id);
+    debug!("Desktop entry and temporary files removed successfully for media_id: {}", media_id);
 
     Ok(())
 }
@@ -68,20 +68,20 @@ pub fn remove_desktop_and_tmp(media_id: String) -> anyhow::Result<()> {
 pub async fn image_preview(
     images: &Vec<(String, String, String)>,
 ) -> anyhow::Result<Vec<(String, String, String)>> {
-    info!("Starting image preview generation for {} images.", images.len());
+    debug!("Starting image preview generation for {} images.", images.len());
 
     if std::fs::metadata("/tmp/images").is_ok() {
-        info!("Removing existing temporary images directory: /tmp/images");
+        debug!("Removing existing temporary images directory: /tmp/images");
         std::fs::remove_dir_all("/tmp/images")?;
     }
 
-    info!("Creating temporary images directory: /tmp/images");
+    debug!("Creating temporary images directory: /tmp/images");
     std::fs::create_dir_all("/tmp/images").expect("Failed to create image cache directory");
 
     let mut temp_images: Vec<(String, String, String)> = vec![];
 
     for (media_name, image_url, media_id) in images.iter() {
-        info!(
+        debug!(
             "Downloading image for media_id: {} from URL: {}",
             media_id, image_url
         );
@@ -104,7 +104,7 @@ pub async fn image_preview(
                     media_id.to_string(),
                     output_path,
                 ));
-                info!("Image saved successfully for media_id: {}", media_id);
+                debug!("Image saved successfully for media_id: {}", media_id);
             }
             Err(e) => {
                 error!(
@@ -116,7 +116,7 @@ pub async fn image_preview(
         }
     }
 
-    info!("Image preview generation completed successfully.");
+    debug!("Image preview generation completed successfully.");
 
     Ok(temp_images)
 }

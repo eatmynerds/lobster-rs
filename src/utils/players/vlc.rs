@@ -1,5 +1,5 @@
 use crate::utils::SpawnError;
-use tracing::{debug, error, info};
+use tracing::{debug, error};
 
 pub struct Vlc {
     pub executable: String,
@@ -8,7 +8,7 @@ pub struct Vlc {
 
 impl Vlc {
     pub fn new() -> Self {
-        info!("Initializing VLC player.");
+        debug!("Initializing new mpv instance.");
         Self {
             executable: "vlc".to_string(),
             args: vec![],
@@ -33,7 +33,7 @@ impl VlcPlay for Vlc {
 
         let mut temp_args = self.args.clone();
         temp_args.push(args.url.clone());
-        info!("URL to play: {}", args.url);
+        debug!("URL to play: {}", args.url);
 
         if let Some(input_slave) = &args.input_slave {
             let input_slave_arg = format!(r#"--input-slave="{}""#, input_slave.join("#"));
@@ -47,7 +47,7 @@ impl VlcPlay for Vlc {
             debug!("Added meta-title argument: {}", meta_title_arg);
         }
 
-        info!(
+        debug!(
             "Executing VLC command: {} with args: {:?}",
             self.executable, temp_args
         );

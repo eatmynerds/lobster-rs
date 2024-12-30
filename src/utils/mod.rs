@@ -4,6 +4,7 @@ pub mod rofi;
 pub mod image_preview;
 pub mod players;
 pub mod ffmpeg;
+pub mod logging;
 
 #[derive(thiserror::Error, Debug)]
 pub enum SpawnError {

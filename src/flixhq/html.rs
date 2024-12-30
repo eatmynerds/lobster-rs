@@ -3,7 +3,7 @@ use super::flixhq::{
     FlixHQShow,
 };
 use crate::{MediaType, BASE_URL};
-use tracing::{debug, info, warn};
+use tracing::{debug, warn};
 use visdom::types::Elements;
 use visdom::Vis;
 
@@ -96,7 +96,7 @@ impl FlixHQHTML for FlixHQ {
             }
         }
 
-        info!("Parsed {} results.", results.len());
+        debug!("Parsed {} results.", results.len());
         results
     }
 

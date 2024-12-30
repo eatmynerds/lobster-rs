@@ -1,5 +1,5 @@
 use crate::{providers::VideoExtractor, BASE_URL, CLIENT};
-use tracing::{debug, error, info};
+use tracing::{debug, error};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -26,7 +26,7 @@ pub struct VidCloud {
 
 impl VidCloud {
     pub fn new() -> Self {
-        info!("Initializing VidCloud instance.");
+        debug!("Initializing VidCloud instance.");
         Self {
             sources: vec![],
             tracks: vec![],
@@ -43,12 +43,12 @@ impl VideoExtractor for VidCloud {
             server_url, BASE_URL
         );
 
-        info!("Starting extraction process for URL: {}", server_url);
+        debug!("Starting extraction process for URL: {}", server_url);
         debug!("Constructed request URL: {}", request_url);
 
         let response = match CLIENT.get(&request_url).send().await {
             Ok(resp) => {
-                info!("Received response from server.");
+                debug!("Received response from server.");
                 match resp.text().await {
                     Ok(text) => text,
                     Err(e) => {
@@ -71,7 +71,7 @@ impl VideoExtractor for VidCloud {
                 self.tracks = sources.tracks;
                 self.t = sources.t;
                 self.server = sources.server;
-                info!("Successfully deserialized response into VidCloud.");
+                debug!("Successfully deserialized response into VidCloud.");
             }
             Err(e) => {
                 error!("Failed to deserialize response: {}", e);

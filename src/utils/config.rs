@@ -6,7 +6,7 @@ use std::{
     io::Write,
     path::Path,
 };
-use tracing::{debug, info, warn};
+use tracing::{debug, warn};
 
 #[derive(Deserialize, Serialize, Debug)]
 pub struct Config {
@@ -23,7 +23,7 @@ pub struct Config {
 
 impl Config {
     pub fn new() -> Self {
-        info!("Creating a new default configuration.");
+        debug!("Creating a new default configuration.");
         let download_dir = std::env::current_dir()
             .expect("Failed to get current directory")
             .to_str()
@@ -51,14 +51,14 @@ impl Config {
     }
 
     pub fn load_config() -> anyhow::Result<Self> {
-        info!("Loading configuration...");
+        debug!("Loading configuration...");
         let config_dir = dirs::config_dir().context("Failed to retrieve the config directory")?;
 
         let config_path = format!("{}/lobster_rs/config.toml", config_dir.display());
         debug!("Looking for config file at path: {}", config_path);
 
         let config = Config::load_from_file(Path::new(&config_path))?;
-        info!("Configuration loaded successfully.");
+        debug!("Configuration loaded successfully.");
         Ok(config)
     }
 
@@ -86,7 +86,7 @@ impl Config {
             file.write_all(content.as_bytes())
                 .with_context(|| format!("Failed to write to config file: {:?}", file_path))?;
 
-            info!("Default configuration created successfully.");
+            debug!("Default configuration created successfully.");
             return Ok(default_config);
         }
 
@@ -99,7 +99,7 @@ impl Config {
     }
 
     pub fn program_configuration<'a>(args: &'a mut Args, config: &Self) -> &'a mut Args {
-        info!("Applying configuration to program arguments.");
+        debug!("Applying configuration to program arguments.");
 
         if cfg!(target_os = "linux") {
             args.rofi = if !args.rofi {
@@ -159,7 +159,6 @@ impl Config {
             args.debug
         };
 
-        info!("Program arguments configured successfully.");
         args
     }
 }

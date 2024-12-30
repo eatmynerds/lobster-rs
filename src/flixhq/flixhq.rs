@@ -8,7 +8,7 @@ use crate::{
 };
 use anyhow::anyhow;
 use serde::Deserialize;
-use tracing::{info, debug, error};
+use tracing::{debug, error};
 
 #[derive(Debug)]
 pub enum FlixHQInfo {
@@ -94,7 +94,7 @@ pub struct FlixHQ;
 
 impl FlixHQ {
     pub async fn search(&self, query: &str) -> anyhow::Result<Vec<FlixHQInfo>> {
-        info!("Starting search for query: {}", query);
+        debug!("Starting search for query: {}", query);
         let parsed_query = query.replace(" ", "-");
 
         debug!("Formatted query: {}", parsed_query);
@@ -109,12 +109,12 @@ impl FlixHQ {
         debug!("Received HTML for search results");
         let results = self.parse_search(&page_html);
 
-        info!("Search completed with {} results", results.len());
+        debug!("Search completed with {} results", results.len());
         Ok(results)
     }
 
     pub async fn info(&self, media_id: &str) -> anyhow::Result<FlixHQInfo> {
-        info!("Fetching info for media_id: {}", media_id);
+        debug!("Fetching info for media_id: {}", media_id);
         let info_html = CLIENT
             .get(&format!("{}/{}", BASE_URL, media_id))
             .send()
@@ -157,7 +157,7 @@ impl FlixHQ {
                     seasons_and_episodes.push(episodes);
                 }
 
-                info!(
+                debug!(
                     "Fetched {} seasons with {} episodes",
                     season_ids.len(),
                     seasons_and_episodes.last().map(|x| x.len()).unwrap_or(0)
@@ -182,7 +182,7 @@ impl FlixHQ {
             }
 
             Some(MediaType::Movie) => {
-                info!("Media type is Movie");
+                debug!("Media type is Movie");
                 return Ok(FlixHQInfo::Movie(FlixHQMovie {
                     id: search_result
                         .id
@@ -210,7 +210,7 @@ impl FlixHQ {
     }
 
     pub async fn servers(&self, episode_id: &str, media_id: &str) -> anyhow::Result<FlixHQServers> {
-        info!(
+        debug!(
             "Fetching servers for episode_id: {} and media_id: {}",
             episode_id, media_id
         );
@@ -230,7 +230,7 @@ impl FlixHQ {
         debug!("Received HTML for servers");
         let servers = self.info_server(server_html, media_id);
 
-        info!("Found {} servers", servers.len());
+        debug!("Found {} servers", servers.len());
         Ok(FlixHQServers { servers })
     }
 
@@ -240,7 +240,7 @@ impl FlixHQ {
         media_id: &str,
         server: Provider,
     ) -> anyhow::Result<FlixHQSources> {
-        info!(
+        debug!(
             "Fetching sources for episode_id: {}, media_id: {}, server: {}",
             episode_id, media_id, server
         );
@@ -254,7 +254,7 @@ impl FlixHQ {
             Some(index) => index,
             None => {
                 error!("Server {} not found!", server);
-                panic!("Server not found!");
+                std::process::exit(1);
             }
         };
 
@@ -283,7 +283,7 @@ impl FlixHQ {
                 let mut vidcloud = VidCloud::new();
                 vidcloud.extract(&server_info.link).await?;
 
-                info!("Sources and subtitles extracted successfully");
+                debug!("Sources and subtitles extracted successfully");
                 return Ok(FlixHQSources {
                     sources: FlixHQSourceType::VidCloud(vidcloud.sources),
                     subtitles: FlixHQSubtitles::VidCloud(vidcloud.tracks),
