@@ -1,7 +1,7 @@
 use std::sync::{atomic::AtomicBool, Arc};
 
 use crate::utils::SpawnError;
-use tracing::{debug, error};
+use log::{debug, error};
 
 pub struct Ffmpeg {
     pub executable: String,

@@ -1,5 +1,5 @@
 use crate::CLIENT;
-use tracing::{debug, error};
+use log::{debug, error};
 
 pub fn generate_desktop(
     media_title: String,

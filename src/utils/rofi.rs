@@ -1,5 +1,5 @@
 use crate::utils::SpawnError;
-use tracing::{debug, error};
+use log::{debug, error};
 use std::io::Write;
 
 pub struct Rofi {

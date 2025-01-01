@@ -6,7 +6,7 @@ use std::{
     io::Write,
     path::Path,
 };
-use tracing::{debug, warn};
+use log::{debug, warn};
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct Config {

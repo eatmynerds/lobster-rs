@@ -13,8 +13,10 @@ dirs = "5.0.1"
 futures = "0.3.31"
 image = "0.25.5"
 lazy_static = "1.5.0"
+log = "0.4.22"
 regex = "1.11.1"
 reqwest = "0.12.9"
+rich-logger = { version = "0.1.5" }
 self_update = { version = "0.41.0", features = ["archive-tar", "archive-zip", "compression-flate2", "compression-zip-deflate"] }
 serde = { version = "1.0.216", features = ["derive"] }
 serde_json = "1.0.134"
@@ -22,6 +24,4 @@ term_size = "0.3.2"
 thiserror = "2.0.9"
 tokio = { version = "1.42.0", features = ["full"] }
 toml = "0.8.19"
-tracing = "0.1.41"
-tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
 visdom = "1.0.2"

@@ -1,7 +1,7 @@
 use crate::utils::SpawnError;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use tracing::{debug, error};
+use log::{debug, error};
 
 pub struct Mpv {
     pub executable: String,

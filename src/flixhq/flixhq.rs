@@ -8,7 +8,7 @@ use crate::{
 };
 use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
-use tracing::{debug, error};
+use log::{debug, error};
 
 #[derive(Debug)]
 pub enum FlixHQInfo {

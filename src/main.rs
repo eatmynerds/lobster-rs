@@ -3,6 +3,7 @@ use colored::Colorize;
 use futures::future::{BoxFuture, FutureExt};
 use futures::StreamExt;
 use lazy_static::lazy_static;
+use log::{debug, error, info, warn, LevelFilter};
 use reqwest::Client;
 use self_update::cargo_crate_version;
 use serde::{Deserialize, Serialize};
@@ -15,10 +16,6 @@ use std::{
 };
 use tokio::signal;
 use tokio::time::Duration;
-use tracing::{debug, error, info, warn};
-use tracing_subscriber::filter::Targets;
-use tracing_subscriber::prelude::__tracing_subscriber_SubscriberExt;
-use tracing_subscriber::util::SubscriberInitExt;
 
 mod cli;
 use cli::{run, subtitles_prompt};
@@ -31,7 +28,6 @@ use utils::{
     ffmpeg::{Ffmpeg, FfmpegArgs, FfmpegSpawn},
     fzf::{Fzf, FzfArgs, FzfSpawn},
     image_preview::{generate_desktop, image_preview},
-    logging::CustomLayer,
     players::{
         mpv::{Mpv, MpvArgs, MpvPlay},
         vlc::{Vlc, VlcArgs, VlcPlay},
@@ -642,23 +638,33 @@ fn is_command_available(command: &str) -> bool {
 
 fn check_dependencies() {
     let dependencies = if cfg!(target_os = "windows") {
-        vec!["mpv", "ffmpeg", "chafa", "ffmpeg", "fzf"]
+        vec!["mpv", "chafa", "ffmpeg", "fzf"]
     } else {
         vec!["mpv", "fzf", "rofi", "ffmpeg", "chafa"]
     };
 
     for dep in dependencies {
         if !is_command_available(dep) {
-            if dep == "chafa" {
-                warn!("Chafa isn't installed. You won't be able to do image previews with fzf.");
-                continue;
+            match dep {
+                "chafa" => {
+                    warn!(
+                        "Chafa isn't installed. You won't be able to do image previews with fzf."
+                    );
+                    continue;
+                }
+                "rofi" => {
+                    warn!("Rofi isn't installed. You won't be able to use rofi to search.");
+                    continue;
+                }
+                "ffmpeg" => {
+                    warn!("Ffmpeg isn't installed. You won't be able to download.");
+                    continue;
+                }
+                _ => {
+                    error!("{} is missing. Please install it.", dep);
+                    std::process::exit(1);
+                }
             }
-            if dep == "rofi" {
-                warn!("Rofi isn't installed. You won't be able to use rofi to search.");
-                continue;
-            }
-            error!("{} is missing. Please install it.", dep);
-            std::process::exit(1);
         }
     }
 }
@@ -667,16 +673,13 @@ fn check_dependencies() {
 async fn main() -> anyhow::Result<()> {
     let args = Args::parse();
 
-    let filter = if args.debug {
-        Targets::from_str("lobster_rs=debug").unwrap()
+    let log_level = if args.debug {
+        LevelFilter::Debug
     } else {
-        Targets::from_str("lobster_rs=info").unwrap()
+        LevelFilter::Info
     };
 
-    tracing_subscriber::registry()
-        .with(CustomLayer)
-        .with(filter)
-        .init();
+    rich_logger::init(log_level).unwrap();
 
     check_dependencies();
 

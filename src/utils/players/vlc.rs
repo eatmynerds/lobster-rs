@@ -4,7 +4,7 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc,
 };
-use tracing::{debug, error};
+use log::{debug, error};
 
 pub struct Vlc {
     pub executable: String,

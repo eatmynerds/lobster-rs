@@ -1,6 +1,6 @@
 use crate::{providers::VideoExtractor, BASE_URL, CLIENT};
 use serde::{Deserialize, Serialize};
-use tracing::{debug, error};
+use log::{debug, error};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Source {

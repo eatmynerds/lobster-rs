@@ -11,7 +11,7 @@ use crate::Args;
 use crate::{handle_servers, launcher};
 use anyhow::anyhow;
 use std::{io, io::Write, sync::Arc};
-use tracing::{debug, error, warn};
+use log::{debug, error, warn};
 
 pub fn subtitles_prompt() -> bool {
     warn!("Subtitle functionality is unreliable and may significantly slow down video playback since");
