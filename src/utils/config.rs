@@ -8,7 +8,7 @@ use std::{
 };
 use tracing::{debug, warn};
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct Config {
     pub use_external_menu: bool,
     pub download: String,
@@ -55,7 +55,7 @@ impl Config {
         let config_dir = dirs::config_dir().context("Failed to retrieve the config directory")?;
 
         let config_path = format!("{}/lobster_rs/config.toml", config_dir.display());
-        debug!("Looking for config file at path: {}", config_path);
+        debug!("Looking for config file at path: {:?}", config_path);
 
         let config = Config::load_from_file(Path::new(&config_path))?;
         debug!("Configuration loaded successfully.");
@@ -98,7 +98,7 @@ impl Config {
         toml::from_str(&content).context("Failed to parse config.toml")
     }
 
-    pub fn program_configuration<'a>(args: &'a mut Args, config: &Self) -> &'a mut Args {
+    pub fn program_configuration(mut args: Args, config: &Self) -> Args {
         debug!("Applying configuration to program arguments.");
 
         if cfg!(target_os = "linux") {
@@ -108,6 +108,14 @@ impl Config {
             } else {
                 args.rofi
             };
+
+            match std::process::Command::new("rofi").arg("-v").output() {
+                Ok(_) => {}
+                Err(_) => {
+                    warn!("Rofi is not installed. Cannot use it as an external menu.");
+                    args.rofi = false;
+                }
+            }
         } else {
             debug!("Disabling `rofi` as it is not supported on this OS.");
             args.rofi = false;
@@ -124,8 +132,10 @@ impl Config {
             if download.is_some() {
                 debug!("Using provided download directory: {:?}", download);
             } else {
-                warn!("Provided download directory is empty. Using default download directory.");
-                debug!("Using default download directory: {:?}", config.download);
+                warn!(
+                    "Provided download directory is empty. Using default download directory: {:?}",
+                    config.download
+                );
             }
             Some(download.clone().unwrap_or_else(|| config.download.clone()))
         });

@@ -1,6 +1,6 @@
 use crate::{providers::VideoExtractor, BASE_URL, CLIENT};
-use tracing::{debug, error};
 use serde::{Deserialize, Serialize};
+use tracing::{debug, error};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Source {
@@ -13,6 +13,7 @@ pub struct Track {
     pub file: String,
     pub label: String,
     pub kind: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub default: Option<bool>,
 }
 

@@ -7,7 +7,7 @@ use crate::{
     MediaType, Provider, BASE_URL, CLIENT,
 };
 use anyhow::anyhow;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tracing::{debug, error};
 
 #[derive(Debug)]
@@ -74,18 +74,18 @@ pub struct FlixHQServerInfo {
     link: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct FlixHQSources {
     pub subtitles: FlixHQSubtitles,
     pub sources: FlixHQSourceType,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub enum FlixHQSourceType {
     VidCloud(Vec<Source>),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub enum FlixHQSubtitles {
     VidCloud(Vec<Track>),
 }

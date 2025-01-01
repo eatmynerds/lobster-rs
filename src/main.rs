@@ -1,5 +1,7 @@
-use anyhow::anyhow;
 use clap::{Parser, ValueEnum};
+use colored::Colorize;
+use futures::future::{BoxFuture, FutureExt};
+use futures::StreamExt;
 use lazy_static::lazy_static;
 use reqwest::Client;
 use self_update::cargo_crate_version;
@@ -9,23 +11,26 @@ use std::{
     num::ParseIntError,
     process::Command,
     str::FromStr,
+    sync::Arc,
 };
+use tokio::signal;
+use tokio::time::Duration;
 use tracing::{debug, error, info, warn};
 use tracing_subscriber::filter::Targets;
 use tracing_subscriber::prelude::__tracing_subscriber_SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 
 mod cli;
-use cli::get_input;
+use cli::{run, subtitles_prompt};
 mod flixhq;
-use flixhq::flixhq::{FlixHQ, FlixHQInfo, FlixHQSourceType, FlixHQSubtitles};
+use flixhq::flixhq::{FlixHQ, FlixHQSourceType, FlixHQSubtitles};
 mod providers;
 mod utils;
 use utils::{
     config::Config,
     ffmpeg::{Ffmpeg, FfmpegArgs, FfmpegSpawn},
     fzf::{Fzf, FzfArgs, FzfSpawn},
-    image_preview::{generate_desktop, image_preview, remove_desktop_and_tmp},
+    image_preview::{generate_desktop, image_preview},
     logging::CustomLayer,
     players::{
         mpv::{Mpv, MpvArgs, MpvPlay},
@@ -42,7 +47,7 @@ lazy_static! {
 
 #[derive(ValueEnum, Debug, Clone, Serialize, Deserialize)]
 #[clap(rename_all = "kebab-case")]
-enum MediaType {
+pub enum MediaType {
     Tv,
     Movie,
 }
@@ -56,14 +61,15 @@ impl Display for MediaType {
     }
 }
 
-enum Player {
+#[derive(Debug)]
+pub enum Player {
     Vlc,
     Mpv,
 }
 
 #[derive(ValueEnum, Clone, Debug, Serialize, Deserialize, Copy, PartialEq)]
 #[clap(rename_all = "PascalCase")]
-enum Provider {
+pub enum Provider {
     Vidcloud,
     Upcloud,
 }
@@ -79,7 +85,7 @@ impl Display for Provider {
 
 #[derive(ValueEnum, Debug, Clone, Copy)]
 #[clap(rename_all = "kebab-case")]
-enum Quality {
+pub enum Quality {
     Q240 = 240,
     Q360 = 360,
     Q480 = 480,
@@ -88,7 +94,7 @@ enum Quality {
 }
 
 #[derive(thiserror::Error, Debug)]
-enum StreamError {
+pub enum StreamError {
     #[error("Failed to parse quality from string: {0}")]
     QualityParseError(#[from] ParseIntError),
 }
@@ -123,7 +129,7 @@ impl Display for Quality {
 
 #[derive(ValueEnum, Debug, Clone, Serialize, Deserialize, Copy)]
 #[clap(rename_all = "PascalCase")]
-enum Languages {
+pub enum Languages {
     Arabic,
     Danish,
     Dutch,
@@ -151,72 +157,72 @@ impl Display for Languages {
     }
 }
 
-#[derive(Parser, Debug)]
+#[derive(Parser, Debug, Clone)]
 #[clap(author, version, about = "A media streaming CLI tool", long_about = None)]
-struct Args {
+pub struct Args {
     /// The search query or title to look for
     #[clap(value_parser)]
-    query: Option<String>,
+    pub query: Option<String>,
 
     /// Continue watching from current history
     #[clap(short, long)]
-    r#continue: bool,
+    pub r#continue: bool,
 
     /// Downloads movie or episode that is selected (defaults to current directory)
     #[clap(short, long)]
-    download: Option<Option<String>>,
+    pub download: Option<Option<String>>,
 
     /// Enables discord rich presence (beta feature, works fine on Linux)
     #[clap(short, long)]
-    rpc: bool,
+    pub rpc: bool,
 
     /// Edit config file using an editor defined with lobster_editor in the config ($EDITOR by default)
     #[clap(short, long)]
-    edit: bool,
+    pub edit: bool,
 
     /// Shows image previews during media selection
     #[clap(short, long)]
-    image_preview: bool,
+    pub image_preview: bool,
 
     /// Outputs JSON containing video links, subtitle links, etc.
     #[clap(short, long)]
-    json: bool,
+    pub json: bool,
 
     /// Specify the subtitle language
     #[clap(short, long)]
-    language: Option<Languages>,
+    pub language: Option<Languages>,
 
     /// Use rofi instead of fzf
     #[clap(long)]
-    rofi: bool,
+    pub rofi: bool,
 
     /// Specify the provider to watch from
     #[clap(short, long, value_enum)]
-    provider: Option<Provider>,
+    pub provider: Option<Provider>,
 
     /// Specify the video quality
     #[clap(short, long, value_enum)]
-    quality: Option<Quality>,
+    pub quality: Option<Quality>,
 
     /// Lets you select from the most recent movies or TV shows
     #[clap(long, value_enum)]
-    recent: Option<MediaType>,
+    pub recent: Option<MediaType>,
 
     /// Use Syncplay to watch with friends
     #[clap(short, long)]
-    syncplay: bool,
+    pub syncplay: bool,
 
     /// Lets you select from the most popular movies and shows
     #[clap(short, long)]
-    trending: bool,
+    pub trending: bool,
 
     /// Update the script
     #[clap(short, long)]
-    update: bool,
+    pub update: bool,
 
     /// Enable debug mode (prints debug info to stdout and saves it to $TEMPDIR/lobster.log)
     #[clap(long)]
-    debug: bool,
+    pub debug: bool,
 }
 
 fn fzf_launcher<'a>(args: &'a mut FzfArgs) -> String {
@@ -275,8 +281,6 @@ async fn launcher(
     rofi_args: &mut RofiArgs,
     fzf_args: &mut FzfArgs,
 ) -> String {
-    debug!("Starting launcher with rofi: {}", rofi);
-
     if image_preview_files.is_empty() {
         debug!("No image preview files provided.");
     } else {
@@ -303,18 +307,21 @@ async fn launcher(
             rofi_args.show_icons = true;
             rofi_args.dmenu = false;
         } else {
-            if std::process::Command::new("chafa").output().is_err() {
-                warn!("Chafa isn't installed. Cannot preview images with fzf.");
-            } else {
-                debug!("Setting up fzf preview script.");
+            match std::process::Command::new("chafa").arg("-v").output() {
+                Ok(_) => {
+                    debug!("Setting up fzf preview script.");
 
-                fzf_args.preview = Some(
-                    r#"
+                    fzf_args.preview = Some(
+                        r#"
                 selected=$(echo {} | cut -f2 | sed 's/\//-/g')
                 chafa -f sixel -s 80x40 "/tmp/images/${selected}.jpg"
                     "#
-                    .to_string(),
-                );
+                        .to_string(),
+                    );
+                }
+                Err(_) => {
+                    warn!("Chafa isn't installed. Cannot preview images with fzf.");
+                }
             }
         }
     }
@@ -328,31 +335,28 @@ async fn launcher(
     }
 }
 
-fn download(
+async fn download(
     download_dir: String,
     media_title: String,
     url: String,
-    _subtitles: Vec<String>,
-    _subtitle_language: Option<Languages>,
-) {
-    info!("Starting download for {}.", media_title);
+    subtitles: Option<Vec<String>>,
+    subtitle_language: Option<Languages>,
+) -> anyhow::Result<()> {
+    info!("{}", format!(r#"Starting download for "{}""#, media_title));
 
-    let mut ffmpeg = Ffmpeg::new();
+    let ffmpeg = Ffmpeg::new();
 
-    let _ = ffmpeg
-        .embed_video(&mut FfmpegArgs {
-            input_file: url,
-            log_level: Some("error".to_string()),
-            stats: true,
-            output_file: format!("{}/{}.mkv", download_dir, media_title),
-            subtitle_files: None,
-            subtitle_language: None,
-            codec: Some("copy".to_string()),
-        })
-        .unwrap_or_else(|e| {
-            error!("Failed to spawn ffmpeg: {}", e);
-            std::process::exit(1)
-        });
+    ffmpeg.embed_video(FfmpegArgs {
+        input_file: url,
+        log_level: Some("error".to_string()),
+        stats: true,
+        output_file: format!("{}/{}.mkv", download_dir, media_title),
+        subtitle_files: subtitles.as_ref(),
+        subtitle_language: Some(subtitle_language.unwrap_or(Languages::English).to_string()),
+        codec: Some("copy".to_string()),
+    })?;
+
+    Ok(())
 }
 
 fn update() -> anyhow::Result<()> {
@@ -381,85 +385,167 @@ fn update() -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn handle_stream(
+async fn handle_ctrl_c() {
+    signal::ctrl_c()
+        .await
+        .expect("Failed to install Ctrl+C handler");
+}
+
+fn handle_stream(
+    settings: Arc<Args>,
+    config: Arc<Config>,
     player: Player,
     download_dir: Option<String>,
     url: String,
     media_title: String,
     subtitles: Vec<String>,
     subtitle_language: Option<Languages>,
-) -> anyhow::Result<()> {
-    match player {
-        Player::Vlc => {
-            if let Some(download_dir) = download_dir {
-                download(download_dir, media_title, url, subtitles, subtitle_language);
+) -> BoxFuture<'static, anyhow::Result<()>> {
+    tokio::spawn(handle_ctrl_c());
 
-                info!("Download completed. Exiting...");
+    let subtitles_choice = subtitles_prompt();
 
-                return Ok(());
-            }
+    let (subtitles, subtitle_language) = if subtitles_choice {
+        (Some(subtitles), subtitle_language)
+    } else {
+        (None, None)
+    };
 
-            let vlc = Vlc::new();
+    async move {
+        match player {
+            Player::Vlc => {
+                if let Some(download_dir) = download_dir {
+                    download(download_dir, media_title, url, subtitles, subtitle_language).await?;
 
-            let mut child = vlc
-                .play(VlcArgs {
+                    info!("Download completed. Exiting...");
+                    return Ok(());
+                }
+
+                let vlc = Vlc::new();
+
+                vlc.play(VlcArgs {
                     url,
-                    input_slave: Some(subtitles),
+                    input_slave: None,
                     meta_title: Some(media_title),
                     ..Default::default()
-                })
-                .unwrap();
+                })?;
 
-            child
-                .wait()
-                .expect("Failed to spawn child process for vlc.");
-        }
-        Player::Mpv => {
-            if let Some(download_dir) = download_dir {
-                download(download_dir, media_title, url, subtitles, subtitle_language);
+                let run_choice = launcher(
+                    &vec![],
+                    settings.rofi,
+                    &mut RofiArgs {
+                        mesg: Some("Select: ".to_string()),
+                        process_stdin: Some("Exit\nSearch".to_string()),
+                        dmenu: true,
+                        case_sensitive: true,
+                        ..Default::default()
+                    },
+                    &mut FzfArgs {
+                        prompt: Some("Select: ".to_string()),
+                        process_stdin: Some("Exit\nSearch".to_string()),
+                        reverse: true,
+                        ..Default::default()
+                    },
+                )
+                .await;
 
-                info!("Download completed. Exiting...");
-
-                return Ok(());
+                match run_choice.as_str() {
+                    "Search" => {
+                        run(Arc::clone(&settings), Arc::clone(&config)).await?;
+                    }
+                    "Exit" => {
+                        info!("Exiting...");
+                        std::process::exit(0);
+                    }
+                    _ => {}
+                }
             }
+            Player::Mpv => {
+                if let Some(download_dir) = download_dir {
+                    download(download_dir, media_title, url, subtitles, subtitle_language).await?;
 
-            let mpv = Mpv::new();
+                    info!("Download completed. Exiting...");
+                    return Ok(());
+                }
 
-            let mut child = mpv.play(MpvArgs {
-                url,
-                sub_files: Some(subtitles),
-                force_media_title: Some(media_title),
-                ..Default::default()
-            })?;
+                let mpv = Mpv::new();
 
-            child
-                .wait()
-                .expect("Failed to spawn child process for mpv.");
+                mpv.play(MpvArgs {
+                    url,
+                    sub_files: subtitles,
+                    force_media_title: Some(media_title),
+                    ..Default::default()
+                })?;
+
+                let run_choice = launcher(
+                    &vec![],
+                    settings.rofi,
+                    &mut RofiArgs {
+                        mesg: Some("Select: ".to_string()),
+                        process_stdin: Some("Exit\nSearch".to_string()),
+                        dmenu: true,
+                        case_sensitive: true,
+                        ..Default::default()
+                    },
+                    &mut FzfArgs {
+                        prompt: Some("Select: ".to_string()),
+                        process_stdin: Some("Exit\nSearch".to_string()),
+                        reverse: true,
+                        ..Default::default()
+                    },
+                )
+                .await;
+
+                match run_choice.as_str() {
+                    "Search" => {
+                        run(Arc::clone(&settings), Arc::clone(&config)).await?;
+                    }
+                    "Exit" => {
+                        info!("Exiting...");
+                        std::process::exit(0);
+                    }
+                    _ => {}
+                }
+            }
         }
-    }
 
-    Ok(())
+        Ok(())
+    }
+    .boxed()
 }
 
-async fn handle_servers(
-    config: Config,
-    settings: &mut Args,
+pub async fn handle_servers(
+    config: Arc<Config>,
+    settings: Arc<Args>,
     episode_id: &str,
     media_id: &str,
     media_title: &str,
 ) -> anyhow::Result<()> {
-    let server_results = FlixHQ.servers(episode_id, media_id).await?;
+    debug!(
+        "Fetching servers for episode_id: {}, media_id: {}",
+        episode_id, media_id
+    );
 
-    let mut servers: Vec<Provider> = vec![];
+    let server_results = tokio::time::timeout(
+        Duration::from_secs(10),
+        FlixHQ.servers(episode_id, media_id),
+    )
+    .await
+    .map_err(|_| anyhow::anyhow!("Timeout while fetching servers"))??;
 
-    for server_result in server_results.servers {
-        let provider = match server_result.name.as_str() {
-            "Vidcloud" => Provider::Vidcloud,
-            "Upcloud" => Provider::Upcloud,
-            _ => continue,
-        };
-        servers.push(provider);
+    if server_results.servers.is_empty() {
+        return Err(anyhow::anyhow!("No servers found"));
     }
+
+    let servers: Vec<Provider> = server_results
+        .servers
+        .into_iter()
+        .filter_map(|server_result| match server_result.name.as_str() {
+            "Vidcloud" => Some(Provider::Vidcloud),
+            "Upcloud" => Some(Provider::Upcloud),
+            _ => None,
+        })
+        .collect();
 
     let server_choice = settings.provider.unwrap_or(Provider::Vidcloud);
 
@@ -468,60 +554,73 @@ async fn handle_servers(
         .find(|&&x| x == server_choice)
         .unwrap_or(&Provider::Vidcloud);
 
-    let sources = FlixHQ.sources(episode_id, media_id, *server).await?;
+    debug!("Fetching sources for selected server: {:?}", server);
+
+    let sources = tokio::time::timeout(
+        Duration::from_secs(10),
+        FlixHQ.sources(episode_id, media_id, *server),
+    )
+    .await
+    .map_err(|_| anyhow::anyhow!("Timeout while fetching sources"))??;
+
+    debug!("Fetched sources: {:?}", sources);
+
+    if settings.json {
+        println!("{}", serde_json::to_string_pretty(&sources).unwrap().blue());
+    }
 
     match (sources.sources, sources.subtitles) {
         (
             FlixHQSourceType::VidCloud(vidcloud_sources),
             FlixHQSubtitles::VidCloud(vidcloud_subtitles),
         ) => {
-            let mut selected_subtitles: Vec<String> = vec![];
-
-            for subtitle in &vidcloud_subtitles {
-                if subtitle
-                    .label
-                    .contains(&settings.language.unwrap_or(Languages::English).to_string())
-                {
-                    selected_subtitles.push(subtitle.file.to_string());
-                }
+            if vidcloud_sources.is_empty() {
+                return Err(anyhow::anyhow!("No sources available from VidCloud"));
             }
 
-            match config.player.as_str() {
-                "vlc" => {
-                    handle_stream(
-                        Player::Vlc,
-                        settings
-                            .download
-                            .as_ref()
-                            .and_then(|inner| inner.as_ref())
-                            .cloned(),
-                        vidcloud_sources[0].file.to_string(),
-                        media_title.to_string(),
-                        selected_subtitles,
-                        Some(settings.language.unwrap_or(Languages::English)),
-                    )
-                    .await?;
-                }
-                "mpv" => {
-                    handle_stream(
-                        Player::Mpv,
-                        settings
-                            .download
-                            .as_ref()
-                            .and_then(|inner| inner.as_ref())
-                            .cloned(),
-                        vidcloud_sources[0].file.to_string(),
-                        media_title.to_string(),
-                        selected_subtitles,
-                        Some(settings.language.unwrap_or(Languages::English)),
-                    )
-                    .await?;
-                }
+            debug!("Found subtitles: {:?}", vidcloud_subtitles);
+
+            let selected_subtitles: Vec<String> = futures::stream::iter(vidcloud_subtitles)
+                .filter(|subtitle| {
+                    let settings = Arc::clone(&settings);
+                    let subtitle_label = subtitle.label.clone();
+                    async move {
+                        let language = settings.language.unwrap_or(Languages::English).to_string();
+                        subtitle_label.contains(&language)
+                    }
+                })
+                .map(|subtitle| subtitle.file.clone())
+                .collect()
+                .await;
+
+            debug!("Selected subtitles: {:?}", selected_subtitles);
+
+            let player = match config.player.to_lowercase().as_str() {
+                "vlc" => Player::Vlc,
+                "mpv" => Player::Mpv,
                 _ => {
                     error!("Player not supported");
-                    std::process::exit(1)
+                    std::process::exit(1);
                 }
-            }
+            };
+
+            debug!("Starting stream with player: {:?}", player);
+
+            handle_stream(
+                Arc::clone(&settings),
+                Arc::clone(&config),
+                player,
+                settings
+                    .download
+                    .as_ref()
+                    .and_then(|inner| inner.as_ref())
+                    .cloned(),
+                vidcloud_sources[0].file.to_string(),
+                media_title.to_string(),
+                selected_subtitles,
+                Some(settings.language.unwrap_or(Languages::English)),
+            )
+            .await?;
         }
     }
 
@@ -554,6 +653,10 @@ fn check_dependencies() {
                 warn!("Chafa isn't installed. You won't be able to do image previews with fzf.");
                 continue;
             }
+            if dep == "rofi" {
+                warn!("Rofi isn't installed. You won't be able to use rofi to search.");
+                continue;
+            }
             error!("{} is missing. Please install it.", dep);
             std::process::exit(1);
         }
@@ -562,7 +665,7 @@ fn check_dependencies() {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let mut args = Args::parse();
+    let args = Args::parse();
 
     let filter = if args.debug {
         Targets::from_str("lobster_rs=debug").unwrap()
@@ -589,194 +692,11 @@ async fn main() -> anyhow::Result<()> {
         }
     }
 
-    let config = Config::load_config().expect("Failed to load config file");
+    let config = Arc::new(Config::load_config().expect("Failed to load config file"));
 
-    let settings = Config::program_configuration(&mut args, &config);
+    let settings = Arc::new(Config::program_configuration(args, &config));
 
-    let query = match &settings.query {
-        Some(query) => query.to_string(),
-        None => get_input(settings.rofi)?,
-    };
-
-    let results = FlixHQ.search(&query).await?;
-
-    if results.len() == 0 {
-        return Err(anyhow!("No results found"));
-    }
-
-    let mut search_results: Vec<String> = vec![];
-    let mut image_preview_files: Vec<(String, String, String)> = vec![];
-
-    for result in results {
-        match result {
-            FlixHQInfo::Movie(movie) => {
-                if settings.image_preview {
-                    image_preview_files.push((
-                        movie.title.to_string(),
-                        movie.image.to_string(),
-                        movie.id.to_string(),
-                    ));
-                }
-
-                let movie_duration = movie.duration.replace("m", "").parse::<u32>()?;
-                let formatted_duration = if movie_duration >= 60 {
-                    let hours = movie_duration / 60;
-                    let minutes = movie_duration % 60;
-                    format!("{}h{}min", hours, minutes)
-                } else {
-                    format!("{}m", movie_duration)
-                };
-
-                search_results.push(format!(
-                    "{}\t{}\t{}\t{} [{}] [{}]",
-                    movie.image,
-                    movie.id,
-                    movie.media_type,
-                    movie.title,
-                    movie.year,
-                    formatted_duration
-                ));
-            }
-            FlixHQInfo::Tv(tv) => {
-                if settings.image_preview {
-                    image_preview_files.push((
-                        tv.title.to_string(),
-                        tv.image.to_string(),
-                        tv.id.to_string(),
-                    ));
-                }
-
-                search_results.push(format!(
-                    "{}\t{}\t{}\t{} [SZNS {}] [EPS {}]",
-                    tv.image, tv.id, tv.media_type, tv.title, tv.seasons.total_seasons, tv.episodes
-                ))
-            }
-        }
-    }
-
-    let mut media_choice = launcher(
-        &image_preview_files,
-        settings.rofi,
-        &mut RofiArgs {
-            process_stdin: Some(search_results.join("\n")),
-            mesg: Some("Choose a movie or TV show".to_string()),
-            dmenu: true,
-            case_sensitive: true,
-            entry_prompt: Some("".to_string()),
-            display_columns: Some(4),
-            ..Default::default()
-        },
-        &mut FzfArgs {
-            process_stdin: Some(search_results.join("\n")),
-            reverse: true,
-            with_nth: Some("4,5,6,7".to_string()),
-            delimiter: Some("\t".to_string()),
-            header: Some("Choose a movie or TV show".to_string()),
-            ..Default::default()
-        },
-    )
-    .await;
-
-    if settings.image_preview {
-        for (_, _, media_id) in &image_preview_files {
-            remove_desktop_and_tmp(media_id.to_string())
-                .expect("Failed to remove old .desktop files & tmp images");
-        }
-    }
-
-    if settings.rofi {
-        for result in search_results {
-            if result.contains(&media_choice) {
-                media_choice = result;
-                break;
-            }
-        }
-    }
-
-    let media_info = media_choice.split("\t").collect::<Vec<&str>>();
-    let media_id = media_info[1];
-    let media_type = media_info[2];
-    let media_title = media_info[3].split('[').next().unwrap_or("").trim();
-
-    if media_type == "tv" {
-        let show_info = FlixHQ.info(&media_id).await?;
-
-        if let FlixHQInfo::Tv(tv) = show_info {
-            let mut seasons: Vec<String> = vec![];
-
-            for season in 0..tv.seasons.total_seasons {
-                seasons.push(format!("Season {}", season + 1))
-            }
-
-            let season_choice = launcher(
-                &vec![],
-                settings.rofi,
-                &mut RofiArgs {
-                    process_stdin: Some(seasons.join("\n")),
-                    mesg: Some("Choose a season".to_string()),
-                    dmenu: true,
-                    case_sensitive: true,
-                    entry_prompt: Some("".to_string()),
-                    ..Default::default()
-                },
-                &mut FzfArgs {
-                    process_stdin: Some(seasons.join("\n")),
-                    reverse: true,
-                    delimiter: Some("\t".to_string()),
-                    header: Some("Choose a season".to_string()),
-                    ..Default::default()
-                },
-            )
-            .await;
-
-            let season_number = season_choice.replace("Season ", "").parse::<usize>()?;
-
-            let mut episodes: Vec<String> = vec![];
-
-            for episode in &tv.seasons.episodes[season_number - 1] {
-                episodes.push(episode.title.to_string())
-            }
-
-            let episode_choice = launcher(
-                &vec![],
-                settings.rofi,
-                &mut RofiArgs {
-                    process_stdin: Some(episodes.join("\n")),
-                    mesg: Some("Select an episode:".to_string()),
-                    dmenu: true,
-                    case_sensitive: true,
-                    entry_prompt: Some("".to_string()),
-                    ..Default::default()
-                },
-                &mut FzfArgs {
-                    process_stdin: Some(episodes.join("\n")),
-                    reverse: true,
-                    delimiter: Some("\t".to_string()),
-                    header: Some("Select an episode:".to_string()),
-                    ..Default::default()
-                },
-            )
-            .await;
-
-            let episode_choices = &tv.seasons.episodes[season_number - 1];
-
-            let result_index = episode_choices
-                .iter()
-                .position(|episode| episode.title == episode_choice)
-                .unwrap_or_else(|| {
-                    error!("Invalid episode choice: '{}'", episode_choice);
-                    std::process::exit(1)
-                });
-
-            let episode_id = &tv.seasons.episodes[season_number - 1][result_index].id;
-
-            handle_servers(config, settings, episode_id, media_id, media_title).await?;
-        }
-    } else {
-        let episode_id = &media_id.rsplit("-").collect::<Vec<&str>>()[0];
-
-        handle_servers(config, settings, episode_id, media_id, media_title).await?;
-    }
+    run(settings, config).await?;
 
     Ok(())
 }

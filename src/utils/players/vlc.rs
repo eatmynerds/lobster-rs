@@ -1,4 +1,9 @@
 use crate::utils::SpawnError;
+use ctrlc;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
 use tracing::{debug, error};
 
 pub struct Vlc {
@@ -8,7 +13,7 @@ pub struct Vlc {
 
 impl Vlc {
     pub fn new() -> Self {
-        debug!("Initializing new mpv instance.");
+        debug!("Initializing new vlc instance.");
         Self {
             executable: "vlc".to_string(),
             args: vec![],
@@ -24,16 +29,15 @@ pub struct VlcArgs {
 }
 
 pub trait VlcPlay {
-    fn play(&self, args: VlcArgs) -> Result<std::process::Child, SpawnError>;
+    fn play(&self, args: VlcArgs) -> Result<(), SpawnError>;
 }
 
 impl VlcPlay for Vlc {
-    fn play(&self, args: VlcArgs) -> Result<std::process::Child, SpawnError> {
-        debug!("Preparing to play video with args: {:?}", args);
+    fn play(&self, args: VlcArgs) -> Result<(), SpawnError> {
+        debug!("Preparing to play video with URL: {:?}", args.url);
 
         let mut temp_args = self.args.clone();
         temp_args.push(args.url.clone());
-        debug!("URL to play: {}", args.url);
 
         if let Some(input_slave) = &args.input_slave {
             let input_slave_arg = format!(r#"--input-slave="{}""#, input_slave.join("#"));
@@ -52,12 +56,24 @@ impl VlcPlay for Vlc {
             self.executable, temp_args
         );
 
+        debug!("Executing mpv command: {} {:?}", self.executable, temp_args);
+
+        let running = Arc::new(AtomicBool::new(true));
+        let r = running.clone();
+
+        ctrlc::set_handler(move || {
+            r.store(false, Ordering::SeqCst);
+        })
+        .expect("Error setting Ctrl-C handler");
+
         std::process::Command::new(&self.executable)
             .args(temp_args)
-            .spawn()
+            .status()
             .map_err(|e| {
                 error!("Failed to spawn VLC process: {}", e);
                 SpawnError::IOError(e)
-            })
+            })?;
+
+        Ok(())
     }
 }

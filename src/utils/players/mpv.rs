@@ -1,4 +1,6 @@
 use crate::utils::SpawnError;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use tracing::{debug, error};
 
 pub struct Mpv {
@@ -32,12 +34,12 @@ pub struct MpvArgs {
 }
 
 pub trait MpvPlay {
-    fn play(&self, args: MpvArgs) -> Result<std::process::Child, SpawnError>;
+    fn play(&self, args: MpvArgs) -> Result<(), SpawnError>;
 }
 
 impl MpvPlay for Mpv {
-    fn play(&self, args: MpvArgs) -> Result<std::process::Child, SpawnError> {
-        debug!("Preparing to play video with URL: {}", args.url);
+    fn play(&self, args: MpvArgs) -> Result<(), SpawnError> {
+        debug!("Preparing to play video with URL: {:?}", args.url);
 
         let mut temp_args = self.args.clone();
         temp_args.push(args.url.clone());
@@ -58,16 +60,11 @@ impl MpvPlay for Mpv {
         }
 
         if let Some(sub_files) = args.sub_files {
-            let mut temp_sub_files = String::new();
-            for (i, sub_file) in sub_files.iter().enumerate() {
-                let formatted_sub_file = sub_file.replace(":", r#"\:"#);
-                if i == 0 {
-                    temp_sub_files.push_str(&formatted_sub_file);
-                } else {
-                    temp_sub_files.push_str(&formatted_sub_file);
-                    temp_sub_files.push_str(":");
-                }
-            }
+            let temp_sub_files = sub_files
+                .iter()
+                .map(|sub_file| sub_file.replace(":", r#"\:"#))
+                .collect::<Vec<_>>()
+                .join(":");
 
             debug!("Adding subtitle files: {}", temp_sub_files);
             temp_args.push(format!("--sub-files={}", temp_sub_files));
@@ -105,12 +102,22 @@ impl MpvPlay for Mpv {
 
         debug!("Executing mpv command: {} {:?}", self.executable, temp_args);
 
+        let running = Arc::new(AtomicBool::new(true));
+        let r = running.clone();
+
+        ctrlc::set_handler(move || {
+            r.store(false, Ordering::SeqCst);
+        })
+        .expect("Error setting Ctrl-C handler");
+
         std::process::Command::new(&self.executable)
             .args(temp_args)
-            .spawn()
+            .status()
             .map_err(|e| {
-                error!("Failed to spawn mpv process: {}", e);
+                error!("Failed to spawn MPV process: {}", e);
                 SpawnError::IOError(e)
-            })
+            })?;
+
+        Ok(())
     }
 }

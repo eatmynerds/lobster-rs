@@ -1,3 +1,5 @@
+use std::sync::{atomic::AtomicBool, Arc};
+
 use crate::utils::SpawnError;
 use tracing::{debug, error};
 
@@ -28,14 +30,16 @@ pub struct FfmpegArgs<'a> {
 }
 
 pub trait FfmpegSpawn {
-    fn embed_video(&mut self, args: &mut FfmpegArgs) -> Result<std::process::Output, SpawnError>;
+    fn embed_video(&self, args: FfmpegArgs) -> Result<(), SpawnError>;
 }
 
 impl FfmpegSpawn for Ffmpeg {
-    fn embed_video(&mut self, args: &mut FfmpegArgs) -> Result<std::process::Output, SpawnError> {
+    fn embed_video(&self, args: FfmpegArgs) -> Result<(), SpawnError> {
         debug!("Starting embed_video with input file: {}", args.input_file);
 
         let mut temp_args = self.args.clone();
+        temp_args.push("-i".to_string());
+        temp_args.push(args.input_file.to_owned());
 
         if args.stats {
             debug!("Adding stats flag.");
@@ -47,9 +51,6 @@ impl FfmpegSpawn for Ffmpeg {
             temp_args.push("-loglevel".to_string());
             temp_args.push(log_level.to_owned());
         }
-
-        temp_args.push("-i".to_string());
-        temp_args.push(args.input_file.to_owned());
 
         if let Some(subtitle_files) = args.subtitle_files {
             let subtitle_count = subtitle_files.len();
@@ -104,29 +105,33 @@ impl FfmpegSpawn for Ffmpeg {
         temp_args.push(args.output_file.to_owned());
         debug!("Output file set to: {}", args.output_file);
 
-        let mut command = std::process::Command::new(&self.executable);
         debug!(
-            "Executing command: {} {}",
-            self.executable,
-            temp_args.join(" ")
+            "Executing ffmpeg command: {} {:?}",
+            self.executable, temp_args
         );
-        command.args(temp_args);
 
-        match command.spawn() {
-            Ok(child) => match child.wait_with_output() {
-                Ok(output) => {
-                    debug!("Command executed successfully.");
-                    Ok(output)
-                }
-                Err(err) => {
-                    error!("Error waiting for command output: {}", err);
-                    Err(SpawnError::IOError(err))
-                }
-            },
-            Err(err) => {
-                error!("Error spawning command: {}", err);
-                Err(SpawnError::IOError(err))
-            }
+        let running = Arc::new(AtomicBool::new(true));
+
+        let r = running.clone();
+
+        ctrlc::set_handler(move || r.store(false, std::sync::atomic::Ordering::SeqCst))
+            .expect("Error setting Ctrl-C handler");
+
+        let exit_status = std::process::Command::new(&self.executable)
+            .args(temp_args)
+            .status()
+            .map_err(|e| {
+                error!("Error executing ffmpeg command: {}", e);
+                SpawnError::IOError(e)
+            })?;
+
+        if exit_status.code() == Some(8) {
+            error!("Failed to download {:?}", args.output_file);
+            std::process::exit(1);
         }
+
+        println!("Exit status: {}", exit_status);
+
+        Ok(())
     }
 }

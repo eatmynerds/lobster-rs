@@ -27,6 +27,7 @@ pub struct FzfArgs {
     pub ignore_case: bool,
     pub query: Option<String>,
     pub cycle: bool,
+    pub prompt: Option<String>,
     pub delimiter: Option<String>,
     pub preview_window: Option<String>,
 }
@@ -37,13 +38,16 @@ pub trait FzfSpawn {
 
 impl FzfSpawn for Fzf {
     fn spawn(&mut self, args: &mut FzfArgs) -> Result<std::process::Output, SpawnError> {
-        debug!("Starting Fzf spawn with arguments: {:?}", args);
-
         let mut temp_args = self.args.clone();
 
         if let Some(header) = &args.header {
             debug!("Setting header: {}", header);
             temp_args.push(format!("--header={}", header));
+        }
+
+        if let Some(prompt) = &args.prompt {
+            temp_args.push("--prompt".to_string());
+            temp_args.push(prompt.to_string());
         }
 
         if args.reverse {
@@ -89,7 +93,7 @@ impl FzfSpawn for Fzf {
         let mut command = std::process::Command::new(&self.executable);
         command.args(&temp_args);
 
-        debug!("Executing command: {} {}", self.executable, temp_args.join(" "));
+        debug!("Executing fzf command: {} {:?}", self.executable, temp_args);
 
         if let Some(process_stdin) = &args.process_stdin {
             debug!("Process stdin provided, writing to stdin.");
