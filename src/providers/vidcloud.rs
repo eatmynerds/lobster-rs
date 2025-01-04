@@ -1,6 +1,6 @@
 use crate::{providers::VideoExtractor, BASE_URL, CLIENT};
-use serde::{Deserialize, Serialize};
 use log::{debug, error};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Source {
@@ -64,10 +64,9 @@ impl VideoExtractor for VidCloud {
             }
         };
 
-        debug!("Response received: {}", response);
-
         match serde_json::from_str::<Self>(&response) {
             Ok(sources) => {
+                debug!("{}", serde_json::to_value(&sources).unwrap());
                 self.sources = sources.sources;
                 self.tracks = sources.tracks;
                 self.t = sources.t;

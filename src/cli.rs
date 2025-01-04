@@ -10,12 +10,13 @@ use crate::utils::{
 use crate::Args;
 use crate::{handle_servers, launcher};
 use anyhow::anyhow;
-use std::{io, io::Write, sync::Arc};
 use log::{debug, error, warn};
+use std::{io, io::Write, sync::Arc};
 
 pub fn subtitles_prompt() -> bool {
-    warn!("Subtitle functionality is unreliable and may significantly slow down video playback since");
-    warn!("FlixHQ provides incorrect subtitle URLs. (this affects downloading aswell)");
+    warn!(
+        "Subtitle functionality is unreliable and may significantly slow down video playback since FlixHQ provides incorrect subtitle URLs. (this affects downloading aswell)"
+    );
 
     loop {
         print!("Do you want to try and use subtitles anyway? [y/N]: ");
@@ -126,13 +127,18 @@ pub async fn run(settings: Arc<Args>, config: Arc<Config>) -> anyhow::Result<()>
                     ));
                 }
 
-                let movie_duration = movie.duration.replace("m", "").parse::<u32>()?;
-                let formatted_duration = if movie_duration >= 60 {
-                    let hours = movie_duration / 60;
-                    let minutes = movie_duration % 60;
-                    format!("{}h{}min", hours, minutes)
+                let formatted_duration = if movie.duration == "N/A" {
+                    "N/A".to_string()
                 } else {
-                    format!("{}m", movie_duration)
+                    let movie_duration = movie.duration.replace("m", "").parse::<u32>()?;
+
+                    if movie_duration >= 60 {
+                        let hours = movie_duration / 60;
+                        let minutes = movie_duration % 60;
+                        format!("{}h{}min", hours, minutes)
+                    } else {
+                        format!("{}m", movie_duration)
+                    }
                 };
 
                 search_results.push(format!(

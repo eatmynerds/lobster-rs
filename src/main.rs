@@ -470,6 +470,7 @@ fn handle_stream(
                     url,
                     sub_files: subtitles,
                     force_media_title: Some(media_title),
+                    msg_level: Some("trace".to_string()),
                     ..Default::default()
                 })?;
 
