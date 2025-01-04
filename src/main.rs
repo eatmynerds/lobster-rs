@@ -1,5 +1,4 @@
 use clap::{Parser, ValueEnum};
-use colored::Colorize;
 use futures::future::{BoxFuture, FutureExt};
 use futures::StreamExt;
 use lazy_static::lazy_static;
@@ -470,7 +469,7 @@ fn handle_stream(
                     url,
                     sub_files: subtitles,
                     force_media_title: Some(media_title),
-                    msg_level: Some("trace".to_string()),
+                    msg_level: Some("error".to_string()),
                     ..Default::default()
                 })?;
 
@@ -498,7 +497,6 @@ fn handle_stream(
                         run(Arc::clone(&settings), Arc::clone(&config)).await?;
                     }
                     "Exit" => {
-                        info!("Exiting...");
                         std::process::exit(0);
                     }
                     _ => {}
@@ -563,7 +561,7 @@ pub async fn handle_servers(
     debug!("Fetched sources: {:?}", sources);
 
     if settings.json {
-        println!("{}", serde_json::to_string_pretty(&sources).unwrap().blue());
+        debug!("{}", serde_json::to_value(&sources).unwrap());
     }
 
     match (sources.sources, sources.subtitles) {

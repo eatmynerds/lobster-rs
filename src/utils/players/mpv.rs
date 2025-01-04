@@ -1,7 +1,8 @@
 use crate::utils::SpawnError;
+use crossterm::style::Stylize;
+use log::{debug, error};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use log::{debug, error};
 
 pub struct Mpv {
     pub executable: String,
@@ -97,6 +98,10 @@ impl MpvPlay for Mpv {
 
         if let Some(force_media_title) = args.force_media_title {
             debug!("Forcing media title: {}", force_media_title);
+            println!(
+                "{}",
+                format!(r#"Now playing "{}""#, force_media_title).blue()
+            );
             temp_args.push(format!("--force-media-title={}", force_media_title));
         }
 

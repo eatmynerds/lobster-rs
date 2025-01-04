@@ -66,7 +66,6 @@ impl VideoExtractor for VidCloud {
 
         match serde_json::from_str::<Self>(&response) {
             Ok(sources) => {
-                debug!("{}", serde_json::to_value(&sources).unwrap());
                 self.sources = sources.sources;
                 self.tracks = sources.tracks;
                 self.t = sources.t;
