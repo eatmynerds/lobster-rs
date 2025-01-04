@@ -3,6 +3,7 @@ use super::flixhq::{
     FlixHQShow,
 };
 use crate::{MediaType, BASE_URL};
+use log::{debug, warn};
 use visdom::types::Elements;
 use visdom::Vis;
 
@@ -50,10 +51,10 @@ fn page_elements<'a>(page_parser: &'a Page) -> impl Iterator<Item = PageElement>
 
 impl FlixHQHTML for FlixHQ {
     fn parse_search(&self, html: &str) -> Vec<FlixHQInfo> {
+        debug!("Parsing search results from HTML.");
         let page_parser = Page::new(html);
 
         let mut results: Vec<FlixHQInfo> = vec![];
-
         for PageElement {
             id,
             image,
@@ -62,10 +63,12 @@ impl FlixHQHTML for FlixHQ {
             episode,
         } in page_elements(&page_parser)
         {
+            debug!("Processing media item: ID = {}, Title = {}", id, title);
             let media_type = page_parser.media_type(&id);
 
             match media_type {
                 Some(MediaType::Tv) => {
+                    debug!("Identified as TV show.");
                     results.push(FlixHQInfo::Tv(FlixHQShow {
                         id,
                         title,
@@ -79,6 +82,7 @@ impl FlixHQHTML for FlixHQ {
                     }));
                 }
                 Some(MediaType::Movie) => {
+                    debug!("Identified as Movie.");
                     results.push(FlixHQInfo::Movie(FlixHQMovie {
                         id,
                         title,
@@ -88,59 +92,68 @@ impl FlixHQHTML for FlixHQ {
                         media_type: MediaType::Movie,
                     }));
                 }
-                None => continue,
+                None => warn!("Unknown media type for ID = {}", id),
             }
         }
 
+        debug!("Parsed {} results.", results.len());
         results
     }
 
     fn single_page(&self, html: &str, id: &str) -> FlixHQResult {
+        debug!("Parsing single page for ID = {}", id);
         let elements = create_html_fragment(html);
 
-        let page_parser = Page::new(html);
-
         let search_parser = Search::new(&elements);
-
         let info_parser = Info::new(&elements);
 
-        FlixHQResult {
+        let result = FlixHQResult {
             title: search_parser.title(),
             image: search_parser.image(),
-
             year: info_parser.label(3, "Released:").join(""),
             duration: info_parser.duration(),
-            media_type: page_parser.media_type(&id),
+            media_type: Some(MediaType::Tv),
             id: id.to_string(),
-        }
+        };
+
+        debug!("Parsed single page result: {:?}", result);
+        result
     }
 
     fn season_info(&self, html: &str) -> Vec<String> {
+        debug!("Extracting season information.");
         let elements = create_html_fragment(html);
-
         let season_parser = Season::new(elements);
 
-        season_parser
+        let seasons: Vec<String> = season_parser
             .season_results()
             .into_iter()
             .flatten()
-            .collect()
+            .collect();
+
+        debug!("Extracted {} seasons.", seasons.len());
+        seasons
     }
 
     fn episode_info(&self, html: &str) -> Vec<FlixHQEpisode> {
+        debug!("Extracting episode information.");
         let elements = create_html_fragment(html);
-
         let episode_parser = Episode::new(elements);
 
-        episode_parser.episode_results()
+        let episodes = episode_parser.episode_results();
+        debug!("Extracted {} episodes.", episodes.len());
+        episodes
     }
 
     fn info_server(&self, server_html: String, media_id: &str) -> Vec<FlixHQServer> {
+        debug!("Extracting server information for media ID = {}", media_id);
         let elements = create_html_fragment(&server_html);
 
         let server_parser = Server::new(elements);
+        let servers = server_parser.parse_server_html(media_id);
 
-        server_parser.parse_server_html(media_id)
+        debug!("Extracted {} servers.", servers.len());
+        servers
     }
 }
 

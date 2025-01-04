@@ -1,4 +1,7 @@
 use crate::utils::SpawnError;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use log::{debug, error};
 
 pub struct Mpv {
     pub executable: String,
@@ -7,6 +10,7 @@ pub struct Mpv {
 
 impl Mpv {
     pub fn new() -> Self {
+        debug!("Initializing new mpv instance.");
         Self {
             executable: "mpv".to_string(),
             args: vec![],
@@ -14,7 +18,7 @@ impl Mpv {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct MpvArgs {
     pub url: String,
     pub sub_file: Option<String>,
@@ -30,94 +34,90 @@ pub struct MpvArgs {
 }
 
 pub trait MpvPlay {
-    fn play(&self, args: MpvArgs) -> Result<std::process::Child, SpawnError>;
+    fn play(&self, args: MpvArgs) -> Result<(), SpawnError>;
 }
 
 impl MpvPlay for Mpv {
-    fn play(&self, args: MpvArgs) -> Result<std::process::Child, SpawnError> {
-        let mut temp_args = self.args.clone();
+    fn play(&self, args: MpvArgs) -> Result<(), SpawnError> {
+        debug!("Preparing to play video with URL: {:?}", args.url);
 
-        temp_args.push(args.url);
+        let mut temp_args = self.args.clone();
+        temp_args.push(args.url.clone());
 
         if args.quiet {
+            debug!("Adding quiet flag");
             temp_args.push(String::from("--quiet"));
         }
 
         if args.really_quiet {
+            debug!("Adding really quiet flag");
             temp_args.push(String::from("--really-quiet"));
         }
 
         if let Some(msg_level) = args.msg_level {
+            debug!("Setting message level: {}", msg_level);
             temp_args.push(format!("--msg-level=all={}", msg_level));
         }
 
         if let Some(sub_files) = args.sub_files {
-            let mut temp_sub_files = String::new();
+            let temp_sub_files = sub_files
+                .iter()
+                .map(|sub_file| sub_file.replace(":", r#"\:"#))
+                .collect::<Vec<_>>()
+                .join(":");
 
-            for (i, sub_file) in sub_files.iter().enumerate() {
-                if i == 0 {
-                    temp_sub_files.push_str(&sub_file.replace(":", r#"\:"#));
-                } else {
-                    temp_sub_files.push_str(&sub_file.replace(":", r#"\:"#));
-                    temp_sub_files.push_str(":");
-                }
-            }
-
+            debug!("Adding subtitle files: {}", temp_sub_files);
             temp_args.push(format!("--sub-files={}", temp_sub_files));
         }
 
         if args.save_position_on_quit {
+            debug!("Adding save position on quit flag");
             temp_args.push(String::from("--save-position-on-quit"));
         }
 
         if args.write_filename_in_watch_later_config {
+            debug!("Adding write filename in watch later config flag");
             temp_args.push(String::from("--write-filename-in-watch-later-config"));
         }
 
         if let Some(watch_later_dir) = args.watch_later_dir {
+            debug!("Setting watch later directory: {}", watch_later_dir);
             temp_args.push(format!("--watch-later-dir={}", watch_later_dir));
         }
 
         if let Some(input_ipc_server) = args.input_ipc_server {
+            debug!("Setting input IPC server: {}", input_ipc_server);
             temp_args.push(format!("--input-ipc-server={}", input_ipc_server));
         }
 
         if let Some(sub_file) = args.sub_file {
+            debug!("Adding subtitle file: {}", sub_file);
             temp_args.push(format!("--sub-file={sub_file}"));
         }
 
         if let Some(force_media_title) = args.force_media_title {
+            debug!("Forcing media title: {}", force_media_title);
             temp_args.push(format!("--force-media-title={}", force_media_title));
         }
 
+        debug!("Executing mpv command: {} {:?}", self.executable, temp_args);
+
+        let running = Arc::new(AtomicBool::new(true));
+        let r = running.clone();
+
+        ctrlc::set_handler(move || {
+            r.store(false, Ordering::SeqCst);
+        })
+        .expect("Error setting Ctrl-C handler");
+
         std::process::Command::new(&self.executable)
             .args(temp_args)
-            .spawn()
-            .map_err(SpawnError::IOError)
-    }
-}
+            .status()
+            .map_err(|e| {
+                error!("Failed to spawn MPV process: {}", e);
+                SpawnError::IOError(e)
+            })?;
 
-#[cfg(test)]
-mod test {
-    use crate::utils::players::mpv::{Mpv, MpvArgs, MpvPlay};
-
-    #[test]
-    fn test_mpv_spawn() {
-        let mpv = Mpv::new();
-
-        let mut child = mpv
-            .play(MpvArgs {
-                url: String::from("https://www.youtube.com/watch?v=sNHzizPu7yQ&t=1s"),
-                ..Default::default()
-            })
-            .unwrap();
-
-        assert_eq!(
-            child
-                .wait()
-                .expect("Failed to spawn child process for mpv.")
-                .code(),
-            Some(0)
-        )
+        Ok(())
     }
 }

@@ -5,12 +5,17 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.95"
+chrono = "0.4.39"
 clap = { version = "4.5.23", features = ["derive"] }
+colored = "2.2.0"
+ctrlc = "3.4.5"
 dirs = "5.0.1"
 futures = "0.3.31"
 image = "0.25.5"
 lazy_static = "1.5.0"
+log = "0.4.22"
 reqwest = "0.12.9"
+rich-logger = { version = "0.1.15", features = [ "json"] }
 self_update = { version = "0.41.0", features = ["archive-tar", "archive-zip", "compression-flate2", "compression-zip-deflate"] }
 serde = { version = "1.0.216", features = ["derive"] }
 serde_json = "1.0.134"

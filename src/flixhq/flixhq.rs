@@ -7,7 +7,8 @@ use crate::{
     MediaType, Provider, BASE_URL, CLIENT,
 };
 use anyhow::anyhow;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
+use log::{debug, error};
 
 #[derive(Debug)]
 pub enum FlixHQInfo {
@@ -73,18 +74,18 @@ pub struct FlixHQServerInfo {
     link: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct FlixHQSources {
     pub subtitles: FlixHQSubtitles,
     pub sources: FlixHQSourceType,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub enum FlixHQSourceType {
     VidCloud(Vec<Source>),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub enum FlixHQSubtitles {
     VidCloud(Vec<Track>),
 }
@@ -93,7 +94,10 @@ pub struct FlixHQ;
 
 impl FlixHQ {
     pub async fn search(&self, query: &str) -> anyhow::Result<Vec<FlixHQInfo>> {
+        debug!("Starting search for query: {}", query);
         let parsed_query = query.replace(" ", "-");
+
+        debug!("Formatted query: {}", parsed_query);
 
         let page_html = CLIENT
             .get(&format!("{}/search/{}", BASE_URL, parsed_query))
@@ -102,12 +106,15 @@ impl FlixHQ {
             .text()
             .await?;
 
+        debug!("Received HTML for search results");
         let results = self.parse_search(&page_html);
 
+        debug!("Search completed with {} results", results.len());
         Ok(results)
     }
 
     pub async fn info(&self, media_id: &str) -> anyhow::Result<FlixHQInfo> {
+        debug!("Fetching info for media_id: {}", media_id);
         let info_html = CLIENT
             .get(&format!("{}/{}", BASE_URL, media_id))
             .send()
@@ -115,10 +122,12 @@ impl FlixHQ {
             .text()
             .await?;
 
+        debug!("Received HTML for media info");
         let search_result = self.single_page(&info_html, media_id);
 
         match &search_result.media_type {
             Some(MediaType::Tv) => {
+                debug!("Media type is Tv. Processing seasons and episodes");
                 let id = search_result
                     .id
                     .split('-')
@@ -136,7 +145,6 @@ impl FlixHQ {
                 let season_ids = self.season_info(&season_html);
 
                 let mut seasons_and_episodes = vec![];
-
                 for season in &season_ids {
                     let episode_html = CLIENT
                         .get(format!("{}/ajax/v2/season/episodes/{}", BASE_URL, &season))
@@ -148,6 +156,12 @@ impl FlixHQ {
                     let episodes = self.episode_info(&episode_html);
                     seasons_and_episodes.push(episodes);
                 }
+
+                debug!(
+                    "Fetched {} seasons with {} episodes",
+                    season_ids.len(),
+                    seasons_and_episodes.last().map(|x| x.len()).unwrap_or(0)
+                );
 
                 return Ok(FlixHQInfo::Tv(FlixHQShow {
                     episodes: seasons_and_episodes.last().map(|x| x.len()).unwrap_or(0),
@@ -168,6 +182,7 @@ impl FlixHQ {
             }
 
             Some(MediaType::Movie) => {
+                debug!("Media type is Movie");
                 return Ok(FlixHQInfo::Movie(FlixHQMovie {
                     id: search_result
                         .id
@@ -187,11 +202,18 @@ impl FlixHQ {
                     media_type: MediaType::Movie,
                 }));
             }
-            None => return Err(anyhow!("No results found")),
+            None => {
+                error!("No results found for media_id: {}", media_id);
+                return Err(anyhow!("No results found"));
+            }
         }
     }
 
     pub async fn servers(&self, episode_id: &str, media_id: &str) -> anyhow::Result<FlixHQServers> {
+        debug!(
+            "Fetching servers for episode_id: {} and media_id: {}",
+            episode_id, media_id
+        );
         let episode_id = format!(
             "{}/ajax/{}",
             BASE_URL,
@@ -205,8 +227,10 @@ impl FlixHQ {
 
         let server_html = CLIENT.get(episode_id).send().await?.text().await?;
 
+        debug!("Received HTML for servers");
         let servers = self.info_server(server_html, media_id);
 
+        debug!("Found {} servers", servers.len());
         Ok(FlixHQServers { servers })
     }
 
@@ -216,6 +240,10 @@ impl FlixHQ {
         media_id: &str,
         server: Provider,
     ) -> anyhow::Result<FlixHQSources> {
+        debug!(
+            "Fetching sources for episode_id: {}, media_id: {}, server: {}",
+            episode_id, media_id, server
+        );
         let servers = self.servers(episode_id, media_id).await?;
 
         let i = match servers
@@ -224,11 +252,15 @@ impl FlixHQ {
             .position(|s| s.name == server.to_string())
         {
             Some(index) => index,
-            None => panic!("Server not found!"),
+            None => {
+                error!("Server {} not found!", server);
+                std::process::exit(1);
+            }
         };
 
         let parts = &servers.servers[i].url;
 
+        debug!("Selected server URL: {}", parts);
         let server_id: &str = parts
             .split('.')
             .collect::<Vec<_>>()
@@ -246,21 +278,12 @@ impl FlixHQ {
         let server_info: FlixHQServerInfo = serde_json::from_str(&server_json)?;
 
         match server {
-            Provider::Vidcloud => {
+            Provider::Vidcloud | Provider::Upcloud => {
+                debug!("Processing VidCloud or UpCloud sources");
                 let mut vidcloud = VidCloud::new();
-
                 vidcloud.extract(&server_info.link).await?;
 
-                return Ok(FlixHQSources {
-                    sources: FlixHQSourceType::VidCloud(vidcloud.sources),
-                    subtitles: FlixHQSubtitles::VidCloud(vidcloud.tracks),
-                });
-            }
-            Provider::Upcloud => {
-                let mut vidcloud = VidCloud::new();
-
-                vidcloud.extract(&server_info.link).await?;
-
+                debug!("Sources and subtitles extracted successfully");
                 return Ok(FlixHQSources {
                     sources: FlixHQSourceType::VidCloud(vidcloud.sources),
                     subtitles: FlixHQSubtitles::VidCloud(vidcloud.tracks),
