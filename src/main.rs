@@ -696,6 +696,22 @@ async fn main() -> anyhow::Result<()> {
 
     let config = Arc::new(Config::load_config().expect("Failed to load config file"));
 
+    if args.edit {
+        let editor = std::env::var("EDITOR").expect("EDITOR environment variable not set");
+        std::process::Command::new(editor)
+            .arg(
+                dirs::config_dir()
+                    .expect("Failed to get config directory")
+                    .join("lobster_rs/config.toml"),
+            )
+            .status()
+            .expect("Failed to open config file with editor");
+
+        info!("Done editing config file. Exiting...");
+
+        std::process::exit(0);
+    }
+
     let settings = Arc::new(Config::program_configuration(args, &config));
 
     run(settings, config).await?;
