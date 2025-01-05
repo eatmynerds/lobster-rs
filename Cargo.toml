@@ -22,3 +22,9 @@ thiserror = "2.0.9"
 tokio = { version = "1.42.0", features = ["full"] }
 toml = "0.8.19"
 visdom = "1.0.2"
+
+[package.metadata.cross.build]
+pre-build = [
+    "dpkg --add-architecture $CROSS_DEB_ARCH", 
+    "apt-get update && apt-get --assume-yes install libssl-dev:$CROSS_DEB_ARCH"
+]
