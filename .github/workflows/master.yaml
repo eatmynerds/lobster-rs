@@ -17,7 +17,10 @@ jobs:
         rust-version: ${{ matrix.rust }}
     - uses: actions/checkout@master
     - name: Run tests
-      run: cargo build --release
+      run: |
+        cargo build --release
+        rm -rf target/release/lobster-rs.d
+        mv target/release/lobster-rs target/release/lobster-rs-${{matrix.os}}
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
