@@ -24,7 +24,6 @@ jobs:
       - name: Determine Rust target triple
         id: rust_target
         run: |
-          sudo apt-get install build-essential 
           if [ "${{ matrix.rust_os }}" = "linux" ] && [ "${{ matrix.rust_arch }}" = "amd64" ]; then
             echo "RUST_TARGET=x86_64-unknown-linux-musl" >> $GITHUB_ENV
             echo "BINARY_NAME=lobster-rs-linux-amd64" >> $GITHUB_ENV
@@ -54,7 +53,9 @@ jobs:
         run: rustup target add $RUST_TARGET
 
       - name: Build
-        run: cargo build --release --target $RUST_TARGET
+        run: |
+          sudo apt install build-essential pkg-config libssl-dev
+          cargo build --release --target $RUST_TARGET
 
       - name: Collect artifact
         run: |
