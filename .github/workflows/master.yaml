@@ -38,7 +38,7 @@ jobs:
       id: create_release
       uses: actions/create-release@v1
       env:
-        GITHUB_TOKEN: ${{ secrets.TOKEN }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         tag_name: "release-${{ github.run_number }}-${{ github.event.after }}"
         release_name: "Release ${{ github.run_number }}"
