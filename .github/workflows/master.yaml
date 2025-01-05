@@ -2,6 +2,7 @@ name: Build Rust project
 on:
   push:
     branches: [ "master" ]
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -9,17 +10,28 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
         arch: [x86_64, aarch64]
+
     steps:
     - uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: sudo apt-get update && sudo apt-get install -y libssl-dev pkg-config
+
+    - name: Debug OpenSSL Path
+      run: |
+        echo "OpenSSL version:"
+        openssl version
+        echo "OpenSSL directory:"
+        find /usr/lib -name '*ssl*' -type d
+
+    - name: Set OpenSSL Path
+      env:
+        OPENSSL_DIR: /usr/lib/ssl
 
     - name: Set up Rust
       uses: hecrj/setup-rust-action@v2
       with:
         rust-version: stable
-
-    - name: Install dependencies
-      if: matrix.os == 'ubuntu-latest'
-      run: sudo apt-get update && sudo apt-get install -y libssl-dev pkg-config
 
     - name: Install cross-compilation targets
       run: |
@@ -58,42 +70,10 @@ jobs:
     - name: Move output binary
       run: |
         mkdir -p artifacts
-        mv target/${{ matrix.arch }}-unknown-${{ matrix.os }}/release/lobster-rs artifacts/lobster-rs-${{ matrix.arch }}-${{ matrix.os }}
+        mv target/${{ matrix.arch }}-unknown-${{ matrix.os }}/release/my_project artifacts/my_project-${{ matrix.arch }}-${{ matrix.os }}
 
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: lobster-rs-${{ matrix.arch }}-${{ matrix.os }}
-        path: artifacts/lobster-rs-${{ matrix.arch }}-${{ matrix.os }}
-
-  release:
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v4
-
-    - name: Download Artifacts
-      uses: actions/download-artifact@v4
-      with:
-        name: lobster-rs-*
-        path: ./artifacts
-
-    - name: Create GitHub Release
-      id: create_release
-      uses: actions/create-release@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        tag_name: "release-${{ github.run_number }}-${{ github.event.after }}"
-        release_name: "Release ${{ github.run_number }}"
-        draft: false
-        prerelease: false
-
-    - name: Upload binaries to release
-      uses: svenstaro/upload-release-action@v2
-      with:
-        repo_token: ${{ secrets.GITHUB_TOKEN }}
-        file: ./artifacts/*
-        tag: main
-        overwrite: true
-
+        name: my_project-${{ matrix.arch }}-${{ matrix.os }}
+        path: artifacts/my_project-${{ matrix.arch }}-${{ matrix.os }}
