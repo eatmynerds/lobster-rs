@@ -694,18 +694,22 @@ async fn main() -> anyhow::Result<()> {
         }
     }
 
-    if args.edit {
-        let editor = std::env::var("EDITOR").expect("EDITOR environment variable not set");
-        std::process::Command::new(editor)
-            .arg(
-                dirs::config_dir()
-                    .expect("Failed to get config directory")
-                    .join("lobster_rs/config.toml"),
-            )
-            .status()
-            .expect("Failed to open config file with editor");
+    if cfg!(target_os = "linux") {
+        if args.edit {
+            let editor = std::env::var("EDITOR").expect("EDITOR environment variable not set");
+            std::process::Command::new(editor)
+                .arg(
+                    dirs::config_dir()
+                        .expect("Failed to get config directory")
+                        .join("lobster_rs/config.toml"),
+                )
+                .status()
+                .expect("Failed to open config file with editor");
 
-        info!("Done editing config file.");
+            info!("Done editing config file.");
+        }
+    } else {
+        info!("The `edit` flag is only supported on Linux.");
     }
 
     let config = Arc::new(Config::load_config().expect("Failed to load config file"));
