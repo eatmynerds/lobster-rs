@@ -87,11 +87,6 @@ jobs:
    steps:
      - uses: actions/checkout@v3
 
-     - name: 📥 Download artifacts
-       uses: actions/download-artifact@v4
-       with:
-         name: release
-     
      - name: Create GitHub release ✈️
        id: create_release
        uses: actions/create-release@v1
