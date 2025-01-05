@@ -10,7 +10,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     container:
-      image: rust:1.67
+      image: rust:1.83
     strategy:
       matrix:
         rust_os:   [ linux, windows, darwin ]
