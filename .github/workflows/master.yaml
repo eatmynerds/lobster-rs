@@ -54,10 +54,8 @@ jobs:
     - name: 🛠️ Install cross-compilation dependencies (Ubuntu ARM)
       if: matrix.target == 'aarch64-unknown-linux-gnu'
       run: |
-        sudo apt-get update
-        sudo dpkg --add-architecture armhf
-        sudo apt-get update
-        sudo apt-get install -y libssl-dev:armhf
+        wget http://ftp.us.debian.org/debian/pool/main/o/openssl/libssl-dev_3.3.2-2_armhf.deb
+        sudo dpkg -i libssl-dev_3.3.2-2_armhf.deb
 
     - name: 🛠️ Install cross-compilation dependencies (macOS🍎) 
       if: runner.os == 'macOS'
