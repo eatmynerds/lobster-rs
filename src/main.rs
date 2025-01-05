@@ -184,7 +184,7 @@ pub struct Args {
     pub json: bool,
 
     /// Specify the subtitle language
-    #[clap(short, long)]
+    #[clap(short, long, value_enum)]
     pub language: Option<Languages>,
 
     /// Use rofi instead of fzf
@@ -207,9 +207,9 @@ pub struct Args {
     #[clap(short, long)]
     pub syncplay: bool,
 
-    /// Lets you select from the most popular movies and shows
-    #[clap(short, long)]
-    pub trending: bool,
+    /// Lets you select from the most popular movies or TV shows
+    #[clap(short, long, value_enum)]
+    pub trending: Option<MediaType>,
 
     /// Update the script
     #[clap(short, long)]
@@ -561,7 +561,7 @@ pub async fn handle_servers(
     debug!("Fetched sources: {:?}", sources);
 
     if settings.json {
-        debug!("{}", serde_json::to_value(&sources).unwrap());
+        info!("{}", serde_json::to_value(&sources).unwrap());
     }
 
     match (sources.sources, sources.subtitles) {
@@ -694,8 +694,6 @@ async fn main() -> anyhow::Result<()> {
         }
     }
 
-    let config = Arc::new(Config::load_config().expect("Failed to load config file"));
-
     if args.edit {
         let editor = std::env::var("EDITOR").expect("EDITOR environment variable not set");
         std::process::Command::new(editor)
@@ -707,10 +705,10 @@ async fn main() -> anyhow::Result<()> {
             .status()
             .expect("Failed to open config file with editor");
 
-        info!("Done editing config file. Exiting...");
-
-        std::process::exit(0);
+        info!("Done editing config file.");
     }
+
+    let config = Arc::new(Config::load_config().expect("Failed to load config file"));
 
     let settings = Arc::new(Config::program_configuration(args, &config));
 

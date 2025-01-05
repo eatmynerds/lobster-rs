@@ -12,11 +12,15 @@ fn create_html_fragment(html: &str) -> Elements<'_> {
 }
 
 pub(super) trait FlixHQHTML {
+    fn parse_recent_shows(&self, html: &str) -> Vec<FlixHQInfo>;
+    fn parse_recent_movies(&self, html: &str) -> Vec<FlixHQInfo>;
+    fn parse_trending_movies(&self, html: &str) -> Vec<FlixHQInfo>;
+    fn parse_trending_shows(&self, html: &str) -> Vec<FlixHQInfo>;
     fn parse_search(&self, html: &str) -> Vec<FlixHQInfo>;
     fn single_page(&self, html: &str, id: &str) -> FlixHQResult;
     fn season_info(&self, html: &str) -> Vec<String>;
     fn episode_info(&self, html: &str) -> Vec<FlixHQEpisode>;
-    fn info_server(&self, server_html: String, media_id: &str) -> Vec<FlixHQServer>;
+    fn info_server(&self, html: String, media_id: &str) -> Vec<FlixHQServer>;
 }
 
 struct PageElement {
@@ -49,7 +53,233 @@ fn page_elements<'a>(page_parser: &'a Page) -> impl Iterator<Item = PageElement>
         )
 }
 
+struct TrendingMovieElement {
+    id: String,
+    image: String,
+    title: String,
+    release_date: String,
+    duration: String,
+}
+
+fn trending_movies<'a>(
+    trending_parser: &'a Trending,
+) -> impl Iterator<Item = TrendingMovieElement> + use<'a> {
+    let ids = trending_parser.trending_movie_ids();
+    let images = trending_parser.trending_movie_images();
+    let titles = trending_parser.trending_movie_titles();
+    let release_dates = trending_parser.trending_movie_release_dates();
+    let durations = trending_parser.trending_movie_duration();
+
+    ids.zip(images)
+        .zip(titles)
+        .zip(release_dates)
+        .zip(durations)
+        .map(
+            |((((id, image), title), release_date), duration)| TrendingMovieElement {
+                id,
+                image,
+                title,
+                release_date,
+                duration,
+            },
+        )
+}
+
+struct TrendingShowElement {
+    id: String,
+    image: String,
+    title: String,
+    season: String,
+    episode: String,
+}
+
+fn trending_shows<'a>(
+    trending_parser: &'a Trending,
+) -> impl Iterator<Item = TrendingShowElement> + use<'a> {
+    let ids = trending_parser.trending_show_ids();
+    let images = trending_parser.trending_show_images();
+    let titles = trending_parser.trending_show_titles();
+    let seasons = trending_parser.trending_show_seasons();
+    let episodes = trending_parser.trending_show_episodes();
+
+    ids.zip(images).zip(titles).zip(seasons).zip(episodes).map(
+        |((((id, image), title), season), episode)| TrendingShowElement {
+            id,
+            image,
+            title,
+            season,
+            episode,
+        },
+    )
+}
+
+struct RecentMovieElement {
+    id: String,
+    image: String,
+    title: String,
+    release_date: String,
+    duration: String,
+}
+
+fn recent_movies<'a>(
+    recent_parser: &'a Recent,
+) -> impl Iterator<Item = RecentMovieElement> + use<'a> {
+    let ids = recent_parser.recent_movie_ids();
+    let images = recent_parser.recent_movie_images();
+    let titles = recent_parser.recent_movie_titles();
+    let release_dates = recent_parser.recent_movie_release_dates();
+    let durations = recent_parser.recent_movie_durations();
+
+    ids.zip(images)
+        .zip(titles)
+        .zip(release_dates)
+        .zip(durations)
+        .map(
+            |((((id, image), title), release_date), duration)| RecentMovieElement {
+                id,
+                image,
+                title,
+                release_date,
+                duration,
+            },
+        )
+}
+
+struct RecentShowElement {
+    id: String,
+    image: String,
+    title: String,
+    season: String,
+    episode: String,
+}
+
+fn recent_shows<'a>(
+    recent_parser: &'a Recent,
+) -> impl Iterator<Item = RecentShowElement> + use<'a> {
+    let ids = recent_parser.recent_show_ids();
+    let titles = recent_parser.recent_show_titles();
+    let images = recent_parser.recent_show_images();
+    let seasons = recent_parser.recent_show_seasons();
+    let episodes = recent_parser.recent_show_episodes();
+
+    ids.zip(images).zip(titles).zip(seasons).zip(episodes).map(
+        |((((id, image), title), season), episode)| RecentShowElement {
+            id,
+            image,
+            title,
+            season,
+            episode,
+        },
+    )
+}
+
 impl FlixHQHTML for FlixHQ {
+    fn parse_recent_shows(&self, html: &str) -> Vec<FlixHQInfo> {
+        let recent_parser = Recent::new(html);
+
+        let mut results: Vec<FlixHQInfo> = vec![];
+        for RecentShowElement {
+            id,
+            image,
+            title,
+            season,
+            episode,
+        } in recent_shows(&recent_parser)
+        {
+            results.push(FlixHQInfo::Tv(FlixHQShow {
+                id,
+                title,
+                image,
+                seasons: FlixHQSeason {
+                    total_seasons: season.replace("SS ", "").parse().unwrap_or(0),
+                    episodes: vec![],
+                },
+                episodes: episode.replace("EPS ", "").parse().unwrap_or(0),
+                media_type: MediaType::Tv,
+            }));
+        }
+
+        results
+    }
+
+    fn parse_recent_movies(&self, html: &str) -> Vec<FlixHQInfo> {
+        let recent_parser = Recent::new(html);
+
+        let mut results: Vec<FlixHQInfo> = vec![];
+        for RecentMovieElement {
+            id,
+            image,
+            title,
+            release_date,
+            duration,
+        } in recent_movies(&recent_parser)
+        {
+            results.push(FlixHQInfo::Movie(FlixHQMovie {
+                id,
+                title,
+                year: release_date,
+                image,
+                duration,
+                media_type: MediaType::Tv,
+            }));
+        }
+
+        results
+    }
+
+    fn parse_trending_movies(&self, html: &str) -> Vec<FlixHQInfo> {
+        let trending_parser = Trending::new(html);
+
+        let mut results: Vec<FlixHQInfo> = vec![];
+        for TrendingMovieElement {
+            id,
+            image,
+            title,
+            release_date,
+            duration,
+        } in trending_movies(&trending_parser)
+        {
+            results.push(FlixHQInfo::Movie(FlixHQMovie {
+                id,
+                title,
+                year: release_date,
+                image,
+                duration,
+                media_type: MediaType::Tv,
+            }));
+        }
+
+        results
+    }
+
+    fn parse_trending_shows(&self, html: &str) -> Vec<FlixHQInfo> {
+        let trending_parser = Trending::new(html);
+
+        let mut results: Vec<FlixHQInfo> = vec![];
+        for TrendingShowElement {
+            id,
+            image,
+            title,
+            season,
+            episode,
+        } in trending_shows(&trending_parser)
+        {
+            results.push(FlixHQInfo::Tv(FlixHQShow {
+                id,
+                title,
+                image,
+                seasons: FlixHQSeason {
+                    total_seasons: season.replace("SS ", "").parse().unwrap_or(0),
+                    episodes: vec![],
+                },
+                episodes: episode.replace("EPS ", "").parse().unwrap_or(0),
+                media_type: MediaType::Tv,
+            }));
+        }
+
+        results
+    }
+
     fn parse_search(&self, html: &str) -> Vec<FlixHQInfo> {
         debug!("Parsing search results from HTML.");
         let page_parser = Page::new(html);
@@ -103,7 +333,6 @@ impl FlixHQHTML for FlixHQ {
     fn single_page(&self, html: &str, id: &str) -> FlixHQResult {
         debug!("Parsing single page for ID = {}", id);
         let elements = create_html_fragment(html);
-
         let search_parser = Search::new(&elements);
         let info_parser = Info::new(&elements);
 
@@ -122,8 +351,7 @@ impl FlixHQHTML for FlixHQ {
 
     fn season_info(&self, html: &str) -> Vec<String> {
         debug!("Extracting season information.");
-        let elements = create_html_fragment(html);
-        let season_parser = Season::new(elements);
+        let season_parser = Season::new(html);
 
         let seasons: Vec<String> = season_parser
             .season_results()
@@ -137,19 +365,16 @@ impl FlixHQHTML for FlixHQ {
 
     fn episode_info(&self, html: &str) -> Vec<FlixHQEpisode> {
         debug!("Extracting episode information.");
-        let elements = create_html_fragment(html);
-        let episode_parser = Episode::new(elements);
+        let episode_parser = Episode::new(html);
 
         let episodes = episode_parser.episode_results();
         debug!("Extracted {} episodes.", episodes.len());
         episodes
     }
 
-    fn info_server(&self, server_html: String, media_id: &str) -> Vec<FlixHQServer> {
+    fn info_server(&self, html: String, media_id: &str) -> Vec<FlixHQServer> {
         debug!("Extracting server information for media ID = {}", media_id);
-        let elements = create_html_fragment(&server_html);
-
-        let server_parser = Server::new(elements);
+        let server_parser = Server::new(&html);
         let servers = server_parser.parse_server_html(media_id);
 
         debug!("Extracted {} servers.", servers.len());
@@ -224,12 +449,12 @@ impl<'a> Page<'a> {
 }
 
 #[derive(Clone, Copy)]
-struct Search<'page, 'b> {
-    elements: &'b Elements<'page>,
+struct Search<'b> {
+    elements: &'b Elements<'b>,
 }
 
-impl<'page, 'b> Search<'page, 'b> {
-    fn new(elements: &'b Elements<'page>) -> Self {
+impl<'b> Search<'b> {
+    fn new(elements: &'b Elements<'b>) -> Self {
         Self { elements }
     }
 
@@ -259,12 +484,12 @@ impl<'page, 'b> Search<'page, 'b> {
 
 /// Remy clarke was here & some red guy
 #[derive(Clone, Copy)]
-struct Info<'page, 'b> {
-    elements: &'b Elements<'page>,
+struct Info<'b> {
+    elements: &'b Elements<'b>,
 }
 
-impl<'page, 'b> Info<'page, 'b> {
-    fn new(elements: &'b Elements<'page>) -> Self {
+impl<'b> Info<'b> {
+    fn new(elements: &'b Elements<'b>) -> Self {
         Self { elements }
     }
 
@@ -296,7 +521,8 @@ struct Season<'a> {
 }
 
 impl<'a> Season<'a> {
-    fn new(elements: Elements<'a>) -> Self {
+    fn new(html: &'a str) -> Self {
+        let elements = create_html_fragment(html);
         Self { elements }
     }
 
@@ -314,7 +540,8 @@ struct Episode<'a> {
 }
 
 impl<'a> Episode<'a> {
-    fn new(elements: Elements<'a>) -> Self {
+    fn new(html: &'a str) -> Self {
+        let elements = create_html_fragment(html);
         Self { elements }
     }
 
@@ -358,7 +585,8 @@ struct Server<'a> {
 }
 
 impl<'a> Server<'a> {
-    pub fn new(elements: Elements<'a>) -> Self {
+    fn new(html: &'a str) -> Self {
+        let elements = create_html_fragment(html);
         Self { elements }
     }
 
@@ -378,5 +606,213 @@ impl<'a> Server<'a> {
 
             FlixHQServer { name, url }
         })
+    }
+}
+
+struct Recent<'a> {
+    elements: Elements<'a>,
+}
+
+impl<'a> Recent<'a> {
+    fn new(html: &'a str) -> Self {
+        let elements = create_html_fragment(html);
+        Self { elements }
+    }
+    fn recent_movie_ids(&self) -> impl Iterator<Item = String> + use<'a> {
+        self.elements
+        .find("#main-wrapper > div > section:nth-child(6) > div.block_area-content.block_area-list.film_list.film_list-grid > div > div.flw-item > div.film-poster > a")
+        .into_iter()
+        .filter_map(|element| {
+            element
+                .get_attribute("href")
+                .and_then(|href| href.to_string().strip_prefix('/').map(String::from))
+        })
+    }
+
+    fn recent_movie_images(&self) -> impl Iterator<Item = String> + use<'a> {
+        self.elements
+        .find("#main-wrapper > div > section:nth-child(6) > div.block_area-content.block_area-list.film_list.film_list-grid > div > div.flw-item > div.film-poster > img")
+        .into_iter()
+        .filter_map(|element| {
+            element
+                .get_attribute("data-src")
+                .map(|value| value.to_string())
+        })
+    }
+
+    fn recent_movie_titles(&self) -> impl Iterator<Item = String> + use<'a> {
+        self.elements
+        .find("#main-wrapper > div > section:nth-child(6) > div.block_area-content.block_area-list.film_list.film_list-grid > div > div.flw-item > div.film-detail > h3.film-name > a")
+        .into_iter()
+        .filter_map(|element| {
+            element
+                .get_attribute("title")
+                .map(|value| value.to_string())
+        })
+    }
+
+    fn recent_movie_release_dates(&self) -> impl Iterator<Item = String> + use<'a> {
+        self.elements
+        .find("#main-wrapper > div > section:nth-child(6) > div.block_area-content.block_area-list.film_list.film_list-grid > div > div.flw-item > div.film-detail > div.fd-infor > span:nth-child(1)")
+        .into_iter()
+        .map(|value| value.text())
+    }
+
+    fn recent_movie_durations(&self) -> impl Iterator<Item = String> + use<'a> {
+        self.elements
+        .find("#main-wrapper > div > section:nth-child(6) > div.block_area-content.block_area-list.film_list.film_list-grid > div > div.flw-item > div.film-detail > div.fd-infor > span:nth-child(3)")
+        .into_iter()
+        .map(|value| value.text())
+    }
+
+    fn recent_show_ids(&self) -> impl Iterator<Item = String> + use<'a> {
+        self.elements
+        .find("#main-wrapper > div > section:nth-child(7) > div.block_area-content.block_area-list.film_list.film_list-grid > div > div.flw-item > div.film-poster > a")
+        .into_iter()
+        .filter_map(|element| {
+            element
+                .get_attribute("href")
+                .and_then(|href| href.to_string().strip_prefix('/').map(String::from))
+        })
+    }
+
+    fn recent_show_titles(&self) -> impl Iterator<Item = String> + use<'a> {
+        self.elements
+        .find("#main-wrapper > div > section:nth-child(7) > div.block_area-content.block_area-list.film_list.film_list-grid > div > div.flw-item > div.film-detail > h3.film-name > a")
+        .into_iter()
+        .filter_map(|element| {
+            element
+                .get_attribute("title")
+                .map(|value| value.to_string())
+        })
+    }
+
+    fn recent_show_images(&self) -> impl Iterator<Item = String> + use<'a> {
+        self.elements
+        .find("#main-wrapper > div > section:nth-child(7) > div.block_area-content.block_area-list.film_list.film_list-grid > div > div.flw-item > div.film-poster > img")
+        .into_iter()
+        .filter_map(|element| {
+            element
+                .get_attribute("data-src")
+                .map(|value| value.to_string())
+        })
+    }
+
+    fn recent_show_episodes(&self) -> impl Iterator<Item = String> + use<'a> {
+        self.elements
+        .find("#main-wrapper > div > section:nth-child(7) > div.block_area-content.block_area-list.film_list.film_list-grid > div > div.flw-item > div.film-detail > div.fd-infor > span:nth-child(3)")
+        .into_iter()
+        .map(|value| value.text())
+    }
+
+    fn recent_show_seasons(&self) -> impl Iterator<Item = String> + use<'a> {
+        self.elements
+        .find("#main-wrapper > div > section:nth-child(7) > div.block_area-content.block_area-list.film_list.film_list-grid > div > div.flw-item > div.film-detail > div.fd-infor > span:nth-child(1)")
+        .into_iter()
+        .map(|value| value.text())
+    }
+}
+
+struct Trending<'a> {
+    elements: Elements<'a>,
+}
+
+impl<'a> Trending<'a> {
+    fn new(html: &'a str) -> Self {
+        let elements = create_html_fragment(html);
+        Self { elements }
+    }
+    fn trending_movie_ids(&self) -> impl Iterator<Item = String> + use<'a> {
+        self.elements
+            .find("div#trending-movies div.film_list-wrap div.flw-item div.film-poster a")
+            .into_iter()
+            .filter_map(|element| {
+                element
+                    .get_attribute("href")
+                    .and_then(|href| href.to_string().strip_prefix('/').map(String::from))
+            })
+    }
+
+    fn trending_movie_images(&self) -> impl Iterator<Item = String> + use<'a> {
+        self.elements
+            .find("div#trending-movies div.film_list-wrap div.flw-item div.film-poster > img")
+            .into_iter()
+            .filter_map(|element| {
+                element
+                    .get_attribute("data-src")
+                    .map(|value| value.to_string())
+            })
+    }
+
+    fn trending_movie_release_dates(&self) -> impl Iterator<Item = String> + use<'a> {
+        self.elements
+            .find("div#trending-movies div.film_list-wrap div.flw-item > div.film-detail > div.fd-infor > span:nth-child(1)")
+            .into_iter()
+            .map(|value| value.text())
+    }
+
+    fn trending_movie_titles(&self) -> impl Iterator<Item = String> + use<'a> {
+        self.elements
+            .find("div#trending-movies div.film_list-wrap div.flw-item > div.film-detail > h3.film-name > a")
+            .into_iter()
+            .filter_map(|element| {
+                element
+                    .get_attribute("title")
+                    .map(|value| value.to_string())
+            })
+    }
+
+    fn trending_movie_duration(&self) -> impl Iterator<Item = String> + use<'a> {
+        self.elements
+            .find("div#trending-movies div.film_list-wrap div.flw-item > div.film-detail > div.fd-infor > span:nth-child(3)")
+            .into_iter()
+            .map(|value| value.text())
+    }
+
+    fn trending_show_ids(&self) -> impl Iterator<Item = String> + use<'a> {
+        self.elements
+            .find("div#trending-tv div.film_list-wrap div.flw-item div.film-poster a")
+            .into_iter()
+            .filter_map(|element| {
+                element
+                    .get_attribute("href")
+                    .and_then(|href| href.to_string().strip_prefix('/').map(String::from))
+            })
+    }
+
+    fn trending_show_images(&self) -> impl Iterator<Item = String> + use<'a> {
+        self.elements
+            .find("div#trending-tv div.film_list-wrap div.flw-item div.film-poster > img")
+            .into_iter()
+            .filter_map(|element| {
+                element
+                    .get_attribute("data-src")
+                    .map(|value| value.to_string())
+            })
+    }
+
+    fn trending_show_seasons(&self) -> impl Iterator<Item = String> + use<'a> {
+        self.elements
+            .find("div#trending-tv div.film_list-wrap div.flw-item > div.film-detail > div.fd-infor > span:nth-child(1)")
+            .into_iter()
+            .map(|value| value.text())
+    }
+
+    fn trending_show_titles(&self) -> impl Iterator<Item = String> + use<'a> {
+        self.elements
+            .find("div#trending-tv div.film_list-wrap div.flw-item > div.film-detail > h3.film-name > a")
+            .into_iter()
+            .filter_map(|element| {
+                element
+                    .get_attribute("title")
+                    .map(|value| value.to_string())
+            })
+    }
+
+    fn trending_show_episodes(&self) -> impl Iterator<Item = String> + use<'a> {
+        self.elements
+            .find("div#trending-tv div.film_list-wrap div.flw-item > div.film-detail > div.fd-infor > span:nth-child(3)")
+            .into_iter()
+            .map(|value| value.text())
     }
 }

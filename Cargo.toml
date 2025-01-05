@@ -15,7 +15,7 @@ image = "0.25.5"
 lazy_static = "1.5.0"
 log = "0.4.22"
 reqwest = "0.12.9"
-rich-logger = { version = "0.1.15", features = [ "json"] }
+rich-logger = { version = "0.1.16", features = [ "json"] }
 self_update = { version = "0.41.0", features = ["archive-tar", "archive-zip", "compression-flate2", "compression-zip-deflate"] }
 serde = { version = "1.0.216", features = ["derive"] }
 serde_json = "1.0.134"

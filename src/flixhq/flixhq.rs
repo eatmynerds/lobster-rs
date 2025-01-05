@@ -7,8 +7,8 @@ use crate::{
     MediaType, Provider, BASE_URL, CLIENT,
 };
 use anyhow::anyhow;
-use serde::{Deserialize, Serialize};
 use log::{debug, error};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug)]
 pub enum FlixHQInfo {
@@ -290,5 +290,57 @@ impl FlixHQ {
                 });
             }
         }
+    }
+
+    pub async fn recent_movies(&self) -> anyhow::Result<Vec<FlixHQInfo>> {
+        let recent_html = CLIENT
+            .get(format!("{}/home", BASE_URL))
+            .send()
+            .await?
+            .text()
+            .await?;
+
+        let results = self.parse_recent_movies(&recent_html);
+
+        Ok(results)
+    }
+
+    pub async fn recent_shows(&self) -> anyhow::Result<Vec<FlixHQInfo>> {
+        let recent_html = CLIENT
+            .get(format!("{}/home", BASE_URL))
+            .send()
+            .await?
+            .text()
+            .await?;
+
+        let results = self.parse_recent_shows(&recent_html);
+
+        Ok(results)
+    }
+
+    pub async fn trending_movies(&self) -> anyhow::Result<Vec<FlixHQInfo>> {
+        let trending_html = CLIENT
+            .get(format!("{}/home", BASE_URL))
+            .send()
+            .await?
+            .text()
+            .await?;
+
+        let results = self.parse_trending_movies(&trending_html);
+
+        Ok(results)
+    }
+
+    pub async fn trending_shows(&self) -> anyhow::Result<Vec<FlixHQInfo>> {
+        let trending_html = CLIENT
+            .get(format!("{}/home", BASE_URL))
+            .send()
+            .await?
+            .text()
+            .await?;
+
+        let results = self.parse_trending_shows(&trending_html);
+
+        Ok(results)
     }
 }

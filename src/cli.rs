@@ -7,8 +7,8 @@ use crate::utils::{
         rofi::{Rofi, RofiArgs, RofiSpawn},
     },
 };
-use crate::Args;
 use crate::{handle_servers, launcher};
+use crate::{Args, MediaType};
 use anyhow::anyhow;
 use log::{debug, error, warn};
 use std::{io, io::Write, sync::Arc};
@@ -103,12 +103,25 @@ pub fn get_input(rofi: bool) -> anyhow::Result<String> {
 }
 
 pub async fn run(settings: Arc<Args>, config: Arc<Config>) -> anyhow::Result<()> {
-    let query = match &settings.query {
-        Some(query) => query.to_string(),
-        None => get_input(settings.rofi)?,
+    let results = if let Some(recent) = &settings.recent {
+        match recent {
+            MediaType::Movie => FlixHQ.recent_movies().await?,
+            MediaType::Tv => FlixHQ.recent_shows().await?,
+        }
+    } else if let Some(trending) = &settings.trending {
+        match trending {
+            MediaType::Movie => FlixHQ.trending_movies().await?,
+            MediaType::Tv => FlixHQ.trending_shows().await?,
+        }
+    } else {
+        let query = match &settings.query {
+            Some(query) => query.to_string(),
+            None => get_input(settings.rofi)?,
+        };
+
+        FlixHQ.search(&query).await?
     };
 
-    let results = FlixHQ.search(&query).await?;
     if results.is_empty() {
         return Err(anyhow!("No results found"));
     }

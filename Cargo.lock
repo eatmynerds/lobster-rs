@@ -2008,9 +2008,9 @@ checksum = "57397d16646700483b67d2dd6511d79318f9d057fdbd21a4066aeac8b41d310a"
 
 [[package]]
 name = "rich-logger"
-version = "0.1.15"
+version = "0.1.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3614511db8c71fd92eb81e9e0afa9abed11906f87e05da7f1ba176ebc57910fb"
+checksum = "2300f2c2fc54ba76f7dc4201aa19d1945646d8c11cb31edbb2a2f3191699a197"
 dependencies = [
  "chrono",
  "crossterm",
