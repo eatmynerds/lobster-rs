@@ -5,7 +5,7 @@ on:
   pull_request:
     branches: [ "master" ]
 jobs:
-  test:
+  build:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -18,4 +18,43 @@ jobs:
         rust-version: ${{ matrix.rust }}
     - uses: actions/checkout@master
     - name: Run tests
-      run: cargo build
+      run: cargo build --release
+
+   - name: Upload Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: lobster-rs-${{ matrix.os }}
+        path: target/release/lobster-rs* 
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Download Artifacts
+      uses: actions/download-artifact@v4
+      with:
+        pattern: lobster-rs-*
+        merge-multiple: true
+
+    - name: Create GitHub Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.TOKEN }}
+      with:
+        tag_name: "release-${{ github.run_number }}-${{ github.event.after }}"
+        release_name: "Release ${{ github.run_number }}"
+        draft: false
+        prerelease: false
+
+    - name: Upload binaries to release
+      uses: svenstaro/upload-release-action@v2
+      with:
+        repo_token: ${{ secrets.TOKEN }}
+        file: lobster-rs-* 
+        tag: ${{ github.ref }}
+        overwrite: true
+        file_glob: true
+
