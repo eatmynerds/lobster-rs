@@ -103,7 +103,7 @@ jobs:
      - name: Zip all binaries 📥
        run: |
          mkdir -p release
-         cp target/${{ matrix.target }}/release/lobster-rs* release/
+         cp target${{ matrix.target }}/release/lobster-rs* release/
          zip -r release/lobster-rs.zip release/*
 
      - name: Upload zip to release 📤
