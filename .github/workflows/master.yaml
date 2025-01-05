@@ -54,7 +54,7 @@ jobs:
 
       - name: Build
         run: |
-          sudo apt update && sudo apt install -y  pkg-config libssl-dev buildessential musl-dev musl-tools pkg-config
+          sudo apt update && sudo apt install -y  pkg-config libssl-dev build-essential musl-dev musl-tools pkg-config
           cargo build --release --target $RUST_TARGET
 
       - name: Collect artifact
