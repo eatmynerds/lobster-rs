@@ -20,7 +20,7 @@ jobs:
       run: |
         cargo build --release
         rm -r target/release/lobster-rs.d
-        mv target/release/lobster-rs target/release/lobster-rs-${{matrix.os}}
+        mv target/release/lobster-rs* target/release/lobster-rs-${{matrix.os}}
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
