@@ -78,7 +78,7 @@ jobs:
         CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
       
     - name: 🏗️ Build (Ubuntu ARM)
-      if: matrix.target == 'aarch64-unknown-linux-gnu"
+      if: matrix.target == 'aarch64-unknown-linux-gnu'
       run: |
         cross build --release --target ${{ matrix.target }}
         
