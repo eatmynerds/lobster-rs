@@ -9,8 +9,6 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    container:
-      image: rust:1.83
     strategy:
       matrix:
         rust_os:   [ linux, windows, darwin ]
@@ -27,10 +25,10 @@ jobs:
         id: rust_target
         run: |
           if [ "${{ matrix.rust_os }}" = "linux" ] && [ "${{ matrix.rust_arch }}" = "amd64" ]; then
-            echo "RUST_TARGET=x86_64-unknown-linux-musl" >> $GITHUB_ENV
+            echo "RUST_TARGET=x86_64-unknown-linux-gnu" >> $GITHUB_ENV
             echo "BINARY_NAME=lobster-rs-linux-amd64" >> $GITHUB_ENV
           elif [ "${{ matrix.rust_os }}" = "linux" ] && [ "${{ matrix.rust_arch }}" = "arm64" ]; then
-            echo "RUST_TARGET=aarch64-unknown-linux-musl" >> $GITHUB_ENV
+            echo "RUST_TARGET=aarch64-unknown-linux-gnu" >> $GITHUB_ENV
             echo "BINARY_NAME=lobster-rs-linux-arm64" >> $GITHUB_ENV
 
           elif [ "${{ matrix.rust_os }}" = "windows" ] && [ "${{ matrix.rust_arch }}" = "amd64" ]; then
@@ -56,9 +54,7 @@ jobs:
 
       - name: Build
         run: |
-          apt update && apt install -y  pkg-config libssl-dev build-essential musl-dev musl-tools pkg-config
-          pkg-config --cflags openssl
-          OPENSSL_DIR=/usr
+          sudo apt update && sudo apt install -y  pkg-config libssl-dev build-essential musl-dev musl-tools pkg-config
           cargo build --release --target $RUST_TARGET
 
       - name: Collect artifact
