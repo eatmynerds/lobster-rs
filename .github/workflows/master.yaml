@@ -1,48 +1,80 @@
-name: Build Rust project
+name: Build and Test
+
 on:
   push:
-    branches: [ "master" ]
+    branches:
+      - main
+  pull_request:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        arch: [x86_64, aarch64]
+        arch: [aarch64, amd64]
+        include:
+          - os: ubuntu-latest
+            openssl_package: libssl-dev
+            pkg_config: pkg-config
+            target: aarch64-unknown-linux-gnu
+            openssl_dir: /usr
+          - os: ubuntu-latest
+            openssl_package: libssl-dev
+            pkg_config: pkg-config
+            target: x86_64-unknown-linux-gnu
+            openssl_dir: /usr
+          - os: macos-latest
+            openssl_package: openssl@1.1
+            pkg_config: pkg-config
+            target: aarch64-apple-darwin
+            openssl_dir: /opt/homebrew/opt/openssl@1.1
+          - os: macos-latest
+            openssl_package: openssl@1.1
+            pkg_config: pkg-config
+            target: x86_64-apple-darwin
+            openssl_dir: /opt/homebrew/opt/openssl@1.1
+          - os: windows-latest
+            openssl_package: openssl
+            pkg_config: pkg-config
+            target: aarch64-pc-windows-msvc
+            openssl_dir: C:/Program Files/OpenSSL-Win64
+          - os: windows-latest
+            openssl_package: openssl
+            pkg_config: pkg-config
+            target: x86_64-pc-windows-msvc
+            openssl_dir: C:/Program Files/OpenSSL-Win64
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Check out code
+        uses: actions/checkout@v3
 
-    - name: Install dependencies
-      if: matrix.os == 'ubuntu-latest'
-      run: sudo apt-get update && sudo apt-get install -y libssl-dev pkg-config
+      - name: Set up Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
 
-    - name: Set OpenSSL Environment Variables
-      if: matrix.os == 'ubuntu-latest'
-      run: |
-        echo "Setting OpenSSL environment variables"
-        echo "OPENSSL_DIR=/usr/lib/ssl" >> $GITHUB_ENV
-        echo "PKG_CONFIG_ALLOW_CROSS=1" >> $GITHUB_ENV
+      - name: Install dependencies
+        run: |
+          if [[ $RUNNER_OS == 'Linux' ]]; then
+            sudo apt-get update
+            sudo apt-get install -y ${{ matrix.openssl_package }} pkg-config
+          elif [[ $RUNNER_OS == 'macOS' ]]; then
+            brew install ${{ matrix.openssl_package }} pkg-config
+          elif [[ $RUNNER_OS == 'Windows' ]]; then
+            choco install openssl
+          fi
 
-    - name: Debug OpenSSL Setup
-      run: |
-        echo "OpenSSL version:"
-        openssl version || echo "OpenSSL not found"
-        echo "PKG_CONFIG_PATH:"
-        echo $PKG_CONFIG_PATH || echo "PKG_CONFIG_PATH not set"
+      - name: Set environment variables
+        run: |
+          echo "OPENSSL_DIR=${{ matrix.openssl_dir }}" >> $GITHUB_ENV
+          echo "PKG_CONFIG_PATH=${{ matrix.openssl_dir }}/lib/pkgconfig" >> $GITHUB_ENV
+          echo "PKG_CONFIG=${{ matrix.pkg_config }}" >> $GITHUB_ENV
 
-    - name: Set up Rust
-      uses: dtolnay/rust-toolchain@stable
-      with:
-        target: ${{ matrix.arch }}-unknown-linux-gnu
+      - name: Build for ${{ matrix.target }}
+        run: |
+          rustup target add ${{ matrix.target }}
+          cargo build --release --target ${{ matrix.target }}
 
-    - name: Build Project
-      run: cargo build --release --target ${{ matrix.arch }}-unknown-linux-gnu
-
-    - name: Upload Artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: lobster-rs-${{ matrix.arch }}-${{ matrix.os }}
-        path: target/${{ matrix.arch }}-unknown-linux-gnu/release/lobster-rs
