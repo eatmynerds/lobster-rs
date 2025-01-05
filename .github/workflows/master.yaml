@@ -17,6 +17,10 @@ jobs:
       with:
         rust-version: stable
 
+    - name: Install dependencies
+      if: matrix.os == 'ubuntu-latest'
+      run: sudo apt-get update && sudo apt-get install -y libssl-dev pkg-config
+
     - name: Install cross-compilation targets
       run: |
         case ${{ matrix.arch }}-${{ matrix.os }} in
@@ -92,3 +96,4 @@ jobs:
         file: ./artifacts/*
         tag: main
         overwrite: true
+
