@@ -54,8 +54,11 @@ jobs:
     - name: 🛠️ Install cross-compilation dependencies (Ubuntu ARM)
       if: matrix.target == 'aarch64-unknown-linux-gnu'
       run: |
-        wget http://ftp.us.debian.org/debian/pool/main/o/openssl/libssl-dev_3.3.2-2_armhf.deb
-        sudo dpkg -i libssl-dev_3.3.2-2_armhf.deb
+        export CC_aarch64_unknown_linux_gnu=aarch64-linux-gnu-gcc
+        export CXX_aarch64_unknown_linux_gnu=aarch64-linux-gnu-g++
+        export PKG_CONFIG_ALLOW_CROSS=1
+        export OPENSSL_DIR=/usr/include/openssl
+        export OPENSSL_LIB_DIR=/usr/lib/aarch64-linux-gnu
 
     - name: 🛠️ Install cross-compilation dependencies (macOS🍎) 
       if: runner.os == 'macOS'
