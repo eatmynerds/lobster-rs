@@ -46,54 +46,44 @@ jobs:
 
       - name: Build
         run: |
-          sudo apt update && sudo apt install -y  pkg-config libssl-dev build-essential musl-dev musl-tools pkg-config
+          sudo apt update && sudo apt install -y  pkg-config libssl-dev llvm build-essential musl-dev musl-tools pkg-config
           cargo build --release --target $RUST_TARGET
-
-      - name: Collect artifact
-        run: |
-          # Create an artifacts directory
-          mkdir -p artifacts
-          
-          # Copy the resulting binary to the artifacts directory
-          # Our binary is "lobster-rs", rename to $BINARY_NAME from the previous step
-          cp target/$RUST_TARGET/release/lobster-rs* artifacts/$BINARY_NAME
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.BINARY_NAME }}
-          path: artifacts/${{ env.BINARY_NAME }}
+          name: ${{ env.BINARY_NAME }} 
+          path: target/release/lobster-rs* 
 
   release:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+    - uses: actions/checkout@v4
 
-      # Download all artifacts produced in the "build" job.
-      - name: Download Artifacts
-        uses: actions/download-artifact@v4
-        with:
-          pattern: lobster-rs-*
-          merge-multiple: true
+    - name: Download Artifacts
+      uses: actions/download-artifact@v4
+      with:
+        pattern: lobster-rs-*
+        merge-multiple: true
 
-      - name: Create GitHub Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.TOKEN }}   # Or use secrets.GITHUB_TOKEN if your config allows
-        with:
-          tag_name: "release-${{ github.run_number }}-${{ github.event.after }}"
-          release_name: "Release ${{ github.run_number }}"
-          draft: false
-          prerelease: false
+    - name: Create GitHub Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.TOKEN }}
+      with:
+        tag_name: "release-${{ github.run_number }}-${{ github.event.after }}"
+        release_name: "Release ${{ github.run_number }}"
+        draft: false
+        prerelease: false
 
-      - name: Upload binaries to release
-        uses: svenstaro/upload-release-action@v2
-        with:
-          repo_token: ${{ secrets.TOKEN }}
-          file: lobster-rs-* 
-          tag: ${{ github.ref }}
-          overwrite: true
-          file_glob: true
+    - name: Upload binaries to release
+      uses: svenstaro/upload-release-action@v2
+      with:
+        repo_token: ${{ secrets.TOKEN }}
+        file: lobster-rs-* 
+        tag: ${{ github.ref }}
+        overwrite: true
+        file_glob: true
 
