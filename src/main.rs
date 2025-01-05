@@ -355,23 +355,19 @@ async fn download(
 }
 
 fn update() -> anyhow::Result<()> {
-    let current_os = std::env::consts::OS;
-
-    let binary_name = match current_os {
-        "windows" => "lobster-rs-x86_64-windows.exe",
-        "linux" => "lobster-rs-x86_64-unknown-linux-gnu",
-        _ => {
-            error!("Cannot update: current OS not supported!");
-            std::process::exit(1)
-        }
+    let bin_name = if cfg!(target_os = "linux") {
+        "lobster-rs-x86_64-unknown-linux-gnu"
+    } else {
+        "lobster-rs-x86_64-windows.exe"
     };
 
     let status = self_update::backends::github::Update::configure()
         .repo_owner("eatmynerds")
         .repo_name("lobster-rs")
-        .bin_name(binary_name)
-        .show_download_progress(true)
+        .bin_name(bin_name)
+        .target("lobster-rs")
         .current_version(cargo_crate_version!())
+        .show_download_progress(true)
         .build()?
         .update()?;
 
@@ -686,10 +682,12 @@ async fn main() -> anyhow::Result<()> {
         let update_result = tokio::task::spawn_blocking(move || update()).await?;
 
         match update_result {
-            Ok(_) => {}
+            Ok(_) => {
+                std::process::exit(0);
+            }
             Err(e) => {
                 error!("Failed to update: {}", e);
-                std::process::exit(1)
+                std::process::exit(1);
             }
         }
     }
