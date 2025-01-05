@@ -55,6 +55,8 @@ jobs:
       - name: Build
         run: |
           sudo apt update && sudo apt install -y  pkg-config libssl-dev build-essential musl-dev musl-tools pkg-config
+          pkg-config --cflags openssl
+          OPENSSL_DIR=/usr
           cargo build --release --target $RUST_TARGET
 
       - name: Collect artifact
