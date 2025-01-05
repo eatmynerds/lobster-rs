@@ -19,6 +19,11 @@ jobs:
       # Install Rust (stable). If you want a fixed version, replace "stable" with e.g. "1.70.0".
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
+
+      - name: Install LLVM and Clang
+        uses: KyleMayes/install-llvm-action@v2
+        with:
+          version: "18.0"
       # Determine which Rust target triple to build for based on (rust_os, rust_arch).
       # We'll store the result in GITHUB_ENV so that future steps can read them as environment variables.
       - name: Determine Rust target triple
@@ -41,12 +46,10 @@ jobs:
             exit 1
           fi
 
-      - name: Add Rust target
-        run: rustup target add $RUST_TARGET
-
       - name: Build
         run: |
-          sudo apt update && sudo apt install -y  pkg-config libssl-dev llvm build-essential musl-dev musl-tools pkg-config
+          sudo apt update && sudo apt install -y  pkg-config libssl-dev llvm build-essential musl-dev musl-tools pkg-config x86_64-w64-mingw32-gcc
+          rustup target add $RUST_TARGET
           cargo build --release --target $RUST_TARGET
 
       - name: Upload Artifact
