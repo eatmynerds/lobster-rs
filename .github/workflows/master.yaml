@@ -24,7 +24,7 @@ jobs:
       - name: Determine Rust target triple
         id: rust_target
         run: |
-          sudo apt-get install libssl-dev
+          sudo apt-get install pkg-config 
           if [ "${{ matrix.rust_os }}" = "linux" ] && [ "${{ matrix.rust_arch }}" = "amd64" ]; then
             echo "RUST_TARGET=x86_64-unknown-linux-musl" >> $GITHUB_ENV
             echo "BINARY_NAME=lobster-rs-linux-amd64" >> $GITHUB_ENV
