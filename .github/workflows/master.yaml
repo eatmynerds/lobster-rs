@@ -12,7 +12,7 @@ jobs:
     strategy:
       matrix:
         rust_os:   [ linux, windows, darwin ]
-        rust_arch: [ amd64, arm64 ]
+        rust_arch: [ amd64 ]
     steps:
       - uses: actions/checkout@v4
 
@@ -27,23 +27,15 @@ jobs:
           if [ "${{ matrix.rust_os }}" = "linux" ] && [ "${{ matrix.rust_arch }}" = "amd64" ]; then
             echo "RUST_TARGET=x86_64-unknown-linux-gnu" >> $GITHUB_ENV
             echo "BINARY_NAME=lobster-rs-linux-amd64" >> $GITHUB_ENV
-          elif [ "${{ matrix.rust_os }}" = "linux" ] && [ "${{ matrix.rust_arch }}" = "arm64" ]; then
-            echo "RUST_TARGET=aarch64-unknown-linux-gnu" >> $GITHUB_ENV
-            echo "BINARY_NAME=lobster-rs-linux-arm64" >> $GITHUB_ENV
 
           elif [ "${{ matrix.rust_os }}" = "windows" ] && [ "${{ matrix.rust_arch }}" = "amd64" ]; then
             echo "RUST_TARGET=x86_64-pc-windows-gnu" >> $GITHUB_ENV
             echo "BINARY_NAME=lobster-rs-windows-amd64.exe" >> $GITHUB_ENV
-          elif [ "${{ matrix.rust_os }}" = "windows" ] && [ "${{ matrix.rust_arch }}" = "arm64" ]; then
-            echo "RUST_TARGET=aarch64-pc-windows-msvc" >> $GITHUB_ENV
-            echo "BINARY_NAME=lobster-rs-windows-arm64.exe" >> $GITHUB_ENV
 
           elif [ "${{ matrix.rust_os }}" = "darwin" ] && [ "${{ matrix.rust_arch }}" = "amd64" ]; then
             echo "RUST_TARGET=x86_64-apple-darwin" >> $GITHUB_ENV
             echo "BINARY_NAME=lobster-rs-darwin-amd64" >> $GITHUB_ENV
-          elif [ "${{ matrix.rust_os }}" = "darwin" ] && [ "${{ matrix.rust_arch }}" = "arm64" ]; then
-            echo "RUST_TARGET=aarch64-apple-darwin" >> $GITHUB_ENV
-            echo "BINARY_NAME=lobster-rs-darwin-arm64" >> $GITHUB_ENV
+
           else
             echo "Unsupported combination: ${{ matrix.rust_os }} / ${{ matrix.rust_arch }}"
             exit 1
