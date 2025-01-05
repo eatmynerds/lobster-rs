@@ -1,80 +1,104 @@
-name: Build and Test
+name: Build Rust project
 
 on:
   push:
-    branches:
-      - main
-  pull_request:
+    branches: [ "master" ]
 
 jobs:
   build:
     runs-on: ${{ matrix.os }}
-
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        arch: [aarch64, amd64]
+        rust: [stable]
         include:
+          # Linux ARM64
           - os: ubuntu-latest
-            openssl_package: libssl-dev
-            pkg_config: pkg-config
             target: aarch64-unknown-linux-gnu
-            openssl_dir: /usr
+            arch: arm64
+          # Linux AMD64
           - os: ubuntu-latest
-            openssl_package: libssl-dev
-            pkg_config: pkg-config
             target: x86_64-unknown-linux-gnu
-            openssl_dir: /usr
+            arch: amd64
+          # macOS ARM64
           - os: macos-latest
-            openssl_package: openssl@1.1
-            pkg_config: pkg-config
             target: aarch64-apple-darwin
-            openssl_dir: /opt/homebrew/opt/openssl@1.1
+            arch: arm64
+          # macOS AMD64
           - os: macos-latest
-            openssl_package: openssl@1.1
-            pkg_config: pkg-config
             target: x86_64-apple-darwin
-            openssl_dir: /opt/homebrew/opt/openssl@1.1
+            arch: amd64
+          # Windows AMD64
           - os: windows-latest
-            openssl_package: openssl
-            pkg_config: pkg-config
-            target: aarch64-pc-windows-msvc
-            openssl_dir: C:/Program Files/OpenSSL-Win64
-          - os: windows-latest
-            openssl_package: openssl
-            pkg_config: pkg-config
             target: x86_64-pc-windows-msvc
-            openssl_dir: C:/Program Files/OpenSSL-Win64
+            arch: amd64
 
     steps:
-      - name: Check out code
-        uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
-      - name: Set up Rust
-        uses: actions-rs/toolchain@v1
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: stable
-          override: true
+          toolchain: ${{ matrix.rust }}
+          targets: ${{ matrix.target }}
 
-      - name: Install dependencies
+      - name: Install cross-compilation dependencies
+        if: matrix.os == 'ubuntu-latest' && matrix.target == 'aarch64-unknown-linux-gnu'
         run: |
-          if [[ $RUNNER_OS == 'Linux' ]]; then
-            sudo apt-get update
-            sudo apt-get install -y ${{ matrix.openssl_package }} pkg-config
-          elif [[ $RUNNER_OS == 'macOS' ]]; then
-            brew install ${{ matrix.openssl_package }} pkg-config
-          elif [[ $RUNNER_OS == 'Windows' ]]; then
-            choco install openssl
-          fi
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
 
-      - name: Set environment variables
+      - name: Build
         run: |
-          echo "OPENSSL_DIR=${{ matrix.openssl_dir }}" >> $GITHUB_ENV
-          echo "PKG_CONFIG_PATH=${{ matrix.openssl_dir }}/lib/pkgconfig" >> $GITHUB_ENV
-          echo "PKG_CONFIG=${{ matrix.pkg_config }}" >> $GITHUB_ENV
-
-      - name: Build for ${{ matrix.target }}
-        run: |
-          rustup target add ${{ matrix.target }}
           cargo build --release --target ${{ matrix.target }}
 
+      - name: Prepare binary for upload (Unix)
+        if: matrix.os != 'windows-latest'
+        run: |
+          cd target/${{ matrix.target }}/release
+          rm -f *.d
+          mv lobster-rs lobster-rs-${{ matrix.os }}-${{ matrix.arch }}
+
+      - name: Prepare binary for upload (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          cd target/${{ matrix.target }}/release
+          move lobster-rs.exe lobster-rs-${{ matrix.os }}-${{ matrix.arch }}.exe
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lobster-rs-${{ matrix.os }}-${{ matrix.arch }}
+          path: target/${{ matrix.target }}/release/lobster-rs-*
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: lobster-rs-*
+          merge-multiple: true
+
+      - name: Create GitHub Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: "release-${{ github.run_number }}-${{ github.event.after }}"
+          release_name: "Release ${{ github.run_number }}"
+          draft: false
+          prerelease: false
+
+      - name: Upload binaries to release
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: lobster-rs-*
+          tag: ${{ steps.create_release.outputs.tag_name }}
+          overwrite: true
+          file_glob: true
