@@ -1,138 +1,89 @@
-name: Build Rust project
+name: Build Lobster Rust
+
 on:
   push:
-    tags: ['v*']
-permissions: write-all
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+
+env:
+  CARGO_TERM_COLOR: always
+
 jobs:
-  build:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        include:
-          # Linux ARM64
-          - os: ubuntu-latest
-            rust: stable
-            target: aarch64-unknown-linux-gnu
-            arch: arm64
-            use_cross: true
-          # Linux AMD64
-          - os: ubuntu-latest
-            rust: stable
-            target: x86_64-unknown-linux-gnu
-            arch: amd64
-            use_cross: false
-          # macOS ARM64
-          - os: macos-latest
-            rust: stable
-            target: aarch64-apple-darwin
-            arch: arm64
-            use_cross: true
-          # macOS AMD64
-          - os: macos-latest
-            rust: stable
-            target: x86_64-apple-darwin
-            arch: amd64
-            use_cross: false
-          # Windows AMD64
-          - os: windows-latest
-            rust: stable
-            target: x86_64-pc-windows-msvc
-            arch: amd64
-            use_cross: false
-    steps:
-      - uses: actions/checkout@v4
-      
-      # Setup MSVC on Windows
-      - name: Setup MSVC
-        if: matrix.os == 'windows-latest'
-        uses: ilammy/msvc-dev-cmd@v1
-        
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: ${{ matrix.rust }}
-          targets: ${{ matrix.target }}
-          
-      - name: Install OpenSSL for ARM64
-        if: matrix.target == 'aarch64-unknown-linux-gnu'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y pkg-config gcc-aarch64-linux-gnu libssl-dev:arm64
-          # Export OpenSSL environment variables
-          echo "OPENSSL_DIR=/usr" >> $GITHUB_ENV
-          echo "OPENSSL_INCLUDE_DIR=/usr/include" >> $GITHUB_ENV
-          echo "OPENSSL_LIB_DIR=/usr/lib/aarch64-linux-gnu" >> $GITHUB_ENV
-          echo "PKG_CONFIG_PATH=/usr/lib/aarch64-linux-gnu/pkgconfig" >> $GITHUB_ENV
-          echo "AARCH64_UNKNOWN_LINUX_GNU_OPENSSL_LIB_DIR=/usr/lib/aarch64-linux-gnu" >> $GITHUB_ENV
-          echo "AARCH64_UNKNOWN_LINUX_GNU_OPENSSL_INCLUDE_DIR=/usr/include" >> $GITHUB_ENV
-          
-      - name: Install cross
-        if: matrix.use_cross
-        run: |
-          cargo install cross
-          
-      - name: Build with cross
-        if: matrix.use_cross
-        env:
-          OPENSSL_DIR: ${{ env.OPENSSL_DIR }}
-          OPENSSL_INCLUDE_DIR: ${{ env.OPENSSL_INCLUDE_DIR }}
-          OPENSSL_LIB_DIR: ${{ env.OPENSSL_LIB_DIR }}
-          PKG_CONFIG_PATH: ${{ env.PKG_CONFIG_PATH }}
-        run: |
-          cross build --release --target ${{ matrix.target }}
-          
-      - name: Build without cross
-        if: "!matrix.use_cross"
-        run: |
-          cargo build --release --target ${{ matrix.target }}
-          
-      - name: Prepare binary for upload (Unix)
-        if: matrix.os != 'windows-latest'
-        run: |
-          cd target/${{ matrix.target }}/release
-          rm -f *.d
-          mv lobster-rs lobster-rs-${{ matrix.os }}-${{ matrix.arch }}
-          
-      - name: Prepare binary for upload (Windows)
-        if: matrix.os == 'windows-latest'
-        run: |
-          cd target/${{ matrix.target }}/release
-          move lobster-rs.exe lobster-rs-${{ matrix.os }}-${{ matrix.arch }}.exe
-          
-      - name: Upload Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: lobster-rs-${{ matrix.os }}-${{ matrix.arch }}
-          path: target/${{ matrix.target }}/release/lobster-rs-*
-          
-  release:
-    needs: build
+  check-version:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 2
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        arch: [x86_64, aarch64]
+        include:
+          - arch: x86_64
+            target: x86_64-unknown-linux-gnu
+          - os: macos-latest
+            arch: x86_64
+            target: x86_64-apple-darwin
+          - arch: aarch64
+            target: aarch64-unknown-linux-gnu
+          - os: macos-latest
+            arch: aarch64
+            target: aarch64-apple-darwin
+          - os: windows-latest
+            arch: x86_64
+            target: x86_64-pc-windows-msvc
+          - os: windows-latest
+            arch: aarch64
+            target: aarch64-pc-windows-msvc
+    runs-on: ${{ matrix.os }}
+
+    steps:
+    - name: 📥 Clone repository
+      uses: actions/checkout@v3
+    
+    - name: 🛠️ Install cross-compilation dependencies (Ubuntu)
+      if: runner.os == 'Linux'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu qemu-user
+
+    - name: 🛠️ Install cross-compilation dependencies (macOS🍎) 
+      if: runner.os == 'macOS'
+      run: |
+        brew install FiloSottile/musl-cross/musl-cross
+        
+    - name: 🔧 Install Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: nightly
+        override: true
+        target: ${{ matrix.target }}
+        profile: minimal
+    
+    - name: 🏗️ Build
+      uses: actions-rs/cargo@v1
+      with:
+        command: build
+        args: --release --target ${{ matrix.target }}
+      env:
+        CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
       
-      - name: Download Artifacts
-        uses: actions/download-artifact@v4
-        with:
-          pattern: lobster-rs-*
-          merge-multiple: true
-          
-      - name: Create GitHub Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref }}
-          draft: false
-          prerelease: false
-          
-      - name: Upload binaries to release
-        uses: svenstaro/upload-release-action@v2
-        with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: lobster-rs-*
-          tag: ${{ github.ref_name }}
-          overwrite: true
-          file_glob: true
+    - name: 🧪 Run tests
+      if: matrix.target != 'aarch64-pc-windows-msvc'
+      uses: actions-rs/cargo@v1 
+      with:
+        command: test
+        args: --target ${{ matrix.target }}
+      env:
+        CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+        QEMU_LD_PREFIX: /usr/aarch64-linux-gnu
+
+    - name: 📦 Upload artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: lobster-rs-${{ runner.os }}-${{ matrix.arch }}-bin
+        path: target/${{ matrix.target }}/release/lobster-rs*
