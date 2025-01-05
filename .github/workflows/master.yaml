@@ -1,92 +1,21 @@
-name: Rust
-
+name: Build Rust project
 on:
   push:
     branches: [ "master" ]
   pull_request:
     branches: [ "master" ]
-
 jobs:
-  build:
-    runs-on: ubuntu-latest
+  test:
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        rust_os:   [ linux, windows, darwin ]
-        rust_arch: [ amd64 ]
+        os: [ubuntu-latest, windows-latest, macOS-latest]
+        rust: [stable
+
     steps:
-      - uses: actions/checkout@v4
-
-      # Install Rust (stable). If you want a fixed version, replace "stable" with e.g. "1.70.0".
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Install LLVM and Clang
-        uses: KyleMayes/install-llvm-action@v2
-        with:
-          version: "18.0"
-      # Determine which Rust target triple to build for based on (rust_os, rust_arch).
-      # We'll store the result in GITHUB_ENV so that future steps can read them as environment variables.
-      - name: Determine Rust target triple
-        id: rust_target
-        run: |
-          if [ "${{ matrix.rust_os }}" = "linux" ] && [ "${{ matrix.rust_arch }}" = "amd64" ]; then
-            echo "RUST_TARGET=x86_64-unknown-linux-gnu" >> $GITHUB_ENV
-            echo "BINARY_NAME=lobster-rs-linux-amd64" >> $GITHUB_ENV
-
-          elif [ "${{ matrix.rust_os }}" = "windows" ] && [ "${{ matrix.rust_arch }}" = "amd64" ]; then
-            echo "RUST_TARGET=x86_64-pc-windows-gnu" >> $GITHUB_ENV
-            echo "BINARY_NAME=lobster-rs-windows-amd64.exe" >> $GITHUB_ENV
-
-          elif [ "${{ matrix.rust_os }}" = "darwin" ] && [ "${{ matrix.rust_arch }}" = "amd64" ]; then
-            echo "RUST_TARGET=x86_64-apple-darwin" >> $GITHUB_ENV
-            echo "BINARY_NAME=lobster-rs-darwin-amd64" >> $GITHUB_ENV
-
-          else
-            echo "Unsupported combination: ${{ matrix.rust_os }} / ${{ matrix.rust_arch }}"
-            exit 1
-          fi
-
-      - name: Build
-        run: |
-          sudo apt update && sudo apt install -y  pkg-config libssl-dev llvm build-essential musl-dev musl-tools pkg-config x86_64-w64-mingw32-gcc
-          rustup target add $RUST_TARGET
-          cargo build --release --target $RUST_TARGET
-
-      - name: Upload Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ env.BINARY_NAME }} 
-          path: target/release/lobster-rs* 
-
-  release:
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v4
-
-    - name: Download Artifacts
-      uses: actions/download-artifact@v4
+    - uses: hecrj/setup-rust-action@v2
       with:
-        pattern: lobster-rs-*
-        merge-multiple: true
-
-    - name: Create GitHub Release
-      id: create_release
-      uses: actions/create-release@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.TOKEN }}
-      with:
-        tag_name: "release-${{ github.run_number }}-${{ github.event.after }}"
-        release_name: "Release ${{ github.run_number }}"
-        draft: false
-        prerelease: false
-
-    - name: Upload binaries to release
-      uses: svenstaro/upload-release-action@v2
-      with:
-        repo_token: ${{ secrets.TOKEN }}
-        file: lobster-rs-* 
-        tag: ${{ github.ref }}
-        overwrite: true
-        file_glob: true
-
+        rust-version: ${{ matrix.rust }}
+    - uses: actions/checkout@master
+    - name: Run tests
+      run: cargo build
