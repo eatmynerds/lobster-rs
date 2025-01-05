@@ -56,7 +56,7 @@ jobs:
         run: |
           sudo apt-get update && sudo apt-get install build-essential pkg-config libssl-dev
           which pkg-config 
-          pkg-config --cflags openssl | xargs
+          echo $(pkg-config --cflags openssl)
           cargo build --release --target $RUST_TARGET
 
       - name: Collect artifact
