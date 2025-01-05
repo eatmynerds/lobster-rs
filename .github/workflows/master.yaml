@@ -19,7 +19,10 @@ jobs:
       # Install Rust (stable). If you want a fixed version, replace "stable" with e.g. "1.70.0".
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
-
+      - name: Dependencies
+        run: |
+          apt-get install libssl-dev
+       
       # Determine which Rust target triple to build for based on (rust_os, rust_arch).
       # We'll store the result in GITHUB_ENV so that future steps can read them as environment variables.
       - name: Determine Rust target triple
