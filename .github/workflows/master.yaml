@@ -3,6 +3,7 @@ name: Build Rust project
 on:
   push:
     branches: [ "master" ]
+  permissions: write-all
 
 jobs:
   build:
