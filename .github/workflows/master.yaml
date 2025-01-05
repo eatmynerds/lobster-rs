@@ -12,72 +12,37 @@ jobs:
         arch: [x86_64, aarch64]
 
     steps:
-    - uses: actions/checkout@v4
+    - name: Checkout code
+      uses: actions/checkout@v4
 
     - name: Install dependencies
-      if: runner.os == 'Linux'  # Only needed for Linux
+      if: matrix.os == 'ubuntu-latest'
       run: sudo apt-get update && sudo apt-get install -y libssl-dev pkg-config
 
-    - name: Debug OpenSSL Path
-      if: runner.os == 'Linux'  # Only needed for Linux
+    - name: Set OpenSSL Environment Variables
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        echo "Setting OpenSSL environment variables"
+        echo "OPENSSL_DIR=/usr/lib/ssl" >> $GITHUB_ENV
+        echo "PKG_CONFIG_ALLOW_CROSS=1" >> $GITHUB_ENV
+
+    - name: Debug OpenSSL Setup
       run: |
         echo "OpenSSL version:"
         openssl version || echo "OpenSSL not found"
-        echo "OpenSSL directory:"
-        find /usr/lib -name '*ssl*' -type d || echo "No SSL directory found"
-
-    - name: Set OpenSSL Path
-      if: runner.os == 'Linux'  # Only needed for Linux
-      run: echo "Setting OPENSSL_DIR for Linux builds"
-      env:
-        OPENSSL_DIR: /usr/lib/ssl
+        echo "PKG_CONFIG_PATH:"
+        echo $PKG_CONFIG_PATH || echo "PKG_CONFIG_PATH not set"
 
     - name: Set up Rust
-      uses: hecrj/setup-rust-action@v2
+      uses: dtolnay/rust-toolchain@stable
       with:
-        rust-version: stable
+        target: ${{ matrix.arch }}-unknown-linux-gnu
 
-    - name: Install cross-compilation targets
-      run: |
-        case ${{ matrix.arch }}-${{ matrix.os }} in
-          x86_64-ubuntu-latest)
-            rustup target add x86_64-unknown-linux-gnu ;;
-          aarch64-ubuntu-latest)
-            rustup target add aarch64-unknown-linux-gnu ;;
-          x86_64-macos-latest)
-            rustup target add x86_64-apple-darwin ;;
-          aarch64-macos-latest)
-            rustup target add aarch64-apple-darwin ;;
-          x86_64-windows-latest)
-            rustup target add x86_64-pc-windows-msvc ;;
-          aarch64-windows-latest)
-            rustup target add aarch64-pc-windows-msvc ;;
-        esac
-
-    - name: Build project
-      run: |
-        case ${{ matrix.arch }}-${{ matrix.os }} in
-          x86_64-ubuntu-latest)
-            cargo build --release --target x86_64-unknown-linux-gnu ;;
-          aarch64-ubuntu-latest)
-            cargo build --release --target aarch64-unknown-linux-gnu ;;
-          x86_64-macos-latest)
-            cargo build --release --target x86_64-apple-darwin ;;
-          aarch64-macos-latest)
-            cargo build --release --target aarch64-apple-darwin ;;
-          x86_64-windows-latest)
-            cargo build --release --target x86_64-pc-windows-msvc ;;
-          aarch64-windows-latest)
-            cargo build --release --target aarch64-pc-windows-msvc ;;
-        esac
-
-    - name: Move output binary
-      run: |
-        mkdir -p artifacts
-        mv target/${{ matrix.arch }}-unknown-${{ matrix.os }}/release/lobster-rs artifacts/lobster-rs-${{ matrix.arch }}-${{ matrix.os }}
+    - name: Build Project
+      run: cargo build --release --target ${{ matrix.arch }}-unknown-linux-gnu
 
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
         name: lobster-rs-${{ matrix.arch }}-${{ matrix.os }}
-        path: artifacts/lobster-rs-${{ matrix.arch }}-${{ matrix.os }}
+        path: target/${{ matrix.arch }}-unknown-linux-gnu/release/lobster-rs
