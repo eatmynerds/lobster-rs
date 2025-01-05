@@ -56,7 +56,7 @@ jobs:
         run: |
           sudo apt-get update && sudo apt-get install build-essential pkg-config libssl-dev
           which pkg-config 
-          pkg-config --cflags openssl 2&> err.txt 
+          /usr/bin/pkg-config --cflags openssl 2&> err.txt 
           cat err.txt
           cargo build --release --target $RUST_TARGET
 
