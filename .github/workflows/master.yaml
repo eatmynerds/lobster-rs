@@ -4,7 +4,6 @@ on:
     branches: [ "master" ]
   pull_request:
     branches: [ "master" ]
-
 jobs:
   build:
     runs-on: ${{ matrix.os }}
@@ -26,7 +25,6 @@ jobs:
       with:
         name: lobster-rs-${{ matrix.os }}
         path: target/release/lobster-rs* 
-
   release:
     needs: build
     runs-on: ubuntu-latest
@@ -36,7 +34,7 @@ jobs:
     - name: Download Artifacts
       uses: actions/download-artifact@v4
       with:
-        pattern: lobster-rs-*
+        pattern: frate-*
         merge-multiple: true
 
     - name: Create GitHub Release
@@ -54,7 +52,7 @@ jobs:
       uses: svenstaro/upload-release-action@v2
       with:
         repo_token: ${{ secrets.TOKEN }}
-        file: lobster-rs-* 
+        file: frate-* 
         tag: ${{ github.ref }}
         overwrite: true
         file_glob: true
