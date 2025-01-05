@@ -54,10 +54,7 @@ jobs:
 
       - name: Build
         run: |
-          sudo apt-get update && sudo apt-get install build-essential pkg-config libssl-dev
-          which pkg-config 
-          /usr/bin/pkg-config --cflags openssl 2&> err.txt 
-          cat err.txt
+          sudo apt update && sudo apt install -y  pkg-config libssl-dev buildessential musl-dev musl-tools pkg-config
           cargo build --release --target $RUST_TARGET
 
       - name: Collect artifact
