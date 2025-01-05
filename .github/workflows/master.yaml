@@ -45,11 +45,13 @@ jobs:
     - name: 📥 Clone repository
       uses: actions/checkout@v3
     
-    - name: 🛠️ Install cross-compilation dependencies (Ubuntu)
+    - name: 🛠️ Install cross-compilation dependencies (Ubuntu AMD)
       if: runner.os == 'Linux'
       run: |
         sudo apt-get update
         sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu qemu-user 
+
+    - name: 🛠️ Install cross-compilation dependencies (Ubuntu ARM)
       if: runner.arch == 'ARM'
       run: |
         sudo apt-get update
