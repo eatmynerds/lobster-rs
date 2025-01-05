@@ -8,29 +8,37 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-        rust: [stable]
         include:
           # Linux ARM64
           - os: ubuntu-latest
+            rust: stable
             target: aarch64-unknown-linux-gnu
             arch: arm64
+            use_cross: true
           # Linux AMD64
           - os: ubuntu-latest
+            rust: stable
             target: x86_64-unknown-linux-gnu
             arch: amd64
+            use_cross: false
           # macOS ARM64
           - os: macos-latest
+            rust: stable
             target: aarch64-apple-darwin
             arch: arm64
+            use_cross: true
           # macOS AMD64
           - os: macos-latest
+            rust: stable
             target: x86_64-apple-darwin
             arch: amd64
+            use_cross: false
           # Windows AMD64
           - os: windows-latest
+            rust: stable
             target: x86_64-pc-windows-msvc
             arch: amd64
+            use_cross: false
     steps:
       - uses: actions/checkout@v4
       
@@ -45,13 +53,18 @@ jobs:
           toolchain: ${{ matrix.rust }}
           targets: ${{ matrix.target }}
           
-      - name: Install cross-compilation dependencies
-        if: matrix.os == 'ubuntu-latest' && matrix.target == 'aarch64-unknown-linux-gnu'
+      - name: Install cross
+        if: matrix.use_cross
         run: |
-          sudo apt-get update
-          sudo apt-get install -y gcc-aarch64-linux-gnu
+          cargo install cross
           
-      - name: Build
+      - name: Build with cross
+        if: matrix.use_cross
+        run: |
+          cross build --release --target ${{ matrix.target }}
+          
+      - name: Build without cross
+        if: "!matrix.use_cross"
         run: |
           cargo build --release --target ${{ matrix.target }}
           
