@@ -2,40 +2,77 @@ name: Build Rust project
 on:
   push:
     branches: [ "master" ]
-  pull_request:
-    branches: [ "master" ]
 jobs:
   build:
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macOS-latest]
-        rust: [stable]
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        arch: [x86_64, aarch64]
     steps:
-    - uses: hecrj/setup-rust-action@v2
+    - uses: actions/checkout@v4
+
+    - name: Set up Rust
+      uses: hecrj/setup-rust-action@v2
       with:
-        rust-version: ${{ matrix.rust }}
-    - uses: actions/checkout@master
-    - name: Run tests
+        rust-version: stable
+
+    - name: Install cross-compilation targets
       run: |
-        cargo build --release
-        rm -r target/release/lobster-rs.d
-        mv target/release/lobster-rs* target/release/lobster-rs-${{matrix.os}}
+        case ${{ matrix.arch }}-${{ matrix.os }} in
+          x86_64-ubuntu-latest)
+            rustup target add x86_64-unknown-linux-gnu ;;
+          aarch64-ubuntu-latest)
+            rustup target add aarch64-unknown-linux-gnu ;;
+          x86_64-macos-latest)
+            rustup target add x86_64-apple-darwin ;;
+          aarch64-macos-latest)
+            rustup target add aarch64-apple-darwin ;;
+          x86_64-windows-latest)
+            rustup target add x86_64-pc-windows-msvc ;;
+          aarch64-windows-latest)
+            rustup target add aarch64-pc-windows-msvc ;;
+        esac
+
+    - name: Build project
+      run: |
+        case ${{ matrix.arch }}-${{ matrix.os }} in
+          x86_64-ubuntu-latest)
+            cargo build --release --target x86_64-unknown-linux-gnu ;;
+          aarch64-ubuntu-latest)
+            cargo build --release --target aarch64-unknown-linux-gnu ;;
+          x86_64-macos-latest)
+            cargo build --release --target x86_64-apple-darwin ;;
+          aarch64-macos-latest)
+            cargo build --release --target aarch64-apple-darwin ;;
+          x86_64-windows-latest)
+            cargo build --release --target x86_64-pc-windows-msvc ;;
+          aarch64-windows-latest)
+            cargo build --release --target aarch64-pc-windows-msvc ;;
+        esac
+
+    - name: Move output binary
+      run: |
+        mkdir -p artifacts
+        mv target/${{ matrix.arch }}-unknown-${{ matrix.os }}/release/lobster-rs artifacts/lobster-rs-${{ matrix.arch }}-${{ matrix.os }}
+
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: lobster-rs-${{ matrix.os }}
-        path: target/release/lobster-rs* 
+        name: lobster-rs-${{ matrix.arch }}-${{ matrix.os }}
+        path: artifacts/lobster-rs-${{ matrix.arch }}-${{ matrix.os }}
+
   release:
     needs: build
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
+
     - name: Download Artifacts
       uses: actions/download-artifact@v4
       with:
-        pattern: lobster-*
-        merge-multiple: true
+        name: lobster-rs-*
+        path: ./artifacts
 
     - name: Create GitHub Release
       id: create_release
@@ -52,8 +89,6 @@ jobs:
       uses: svenstaro/upload-release-action@v2
       with:
         repo_token: ${{ secrets.GITHUB_TOKEN }}
-        file: lobster-* 
-        tag: main 
+        file: ./artifacts/*
+        tag: main
         overwrite: true
-        file_glob: true
-
