@@ -70,10 +70,10 @@ jobs:
     - name: Move output binary
       run: |
         mkdir -p artifacts
-        mv target/${{ matrix.arch }}-unknown-${{ matrix.os }}/release/my_project artifacts/my_project-${{ matrix.arch }}-${{ matrix.os }}
+        mv target/${{ matrix.arch }}-unknown-${{ matrix.os }}/release/lobster-rs artifacts/lobster-rs-${{ matrix.arch }}-${{ matrix.os }}
 
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: my_project-${{ matrix.arch }}-${{ matrix.os }}
-        path: artifacts/my_project-${{ matrix.arch }}-${{ matrix.os }}
+        name: lobster-rs-${{ matrix.arch }}-${{ matrix.os }}
+        path: artifacts/lobster-rs-${{ matrix.arch }}-${{ matrix.os }}
