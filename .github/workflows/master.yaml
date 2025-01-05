@@ -9,6 +9,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    container:
+      image: rust:1.67
     strategy:
       matrix:
         rust_os:   [ linux, windows, darwin ]
