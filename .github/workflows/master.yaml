@@ -1,11 +1,8 @@
 name: Build Rust project
-
 on:
   push:
     tags: ['v*']
-
 permissions: write-all
-
 jobs:
   build:
     runs-on: ${{ matrix.os }}
@@ -34,68 +31,72 @@ jobs:
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             arch: amd64
-
     steps:
       - uses: actions/checkout@v4
-
+      
+      # Setup MSVC on Windows
+      - name: Setup MSVC
+        if: matrix.os == 'windows-latest'
+        uses: ilammy/msvc-dev-cmd@v1
+        
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ matrix.rust }}
           targets: ${{ matrix.target }}
-
+          
       - name: Install cross-compilation dependencies
         if: matrix.os == 'ubuntu-latest' && matrix.target == 'aarch64-unknown-linux-gnu'
         run: |
           sudo apt-get update
           sudo apt-get install -y gcc-aarch64-linux-gnu
-
+          
       - name: Build
         run: |
           cargo build --release --target ${{ matrix.target }}
-
+          
       - name: Prepare binary for upload (Unix)
         if: matrix.os != 'windows-latest'
         run: |
           cd target/${{ matrix.target }}/release
           rm -f *.d
           mv lobster-rs lobster-rs-${{ matrix.os }}-${{ matrix.arch }}
-
+          
       - name: Prepare binary for upload (Windows)
         if: matrix.os == 'windows-latest'
         run: |
           cd target/${{ matrix.target }}/release
           move lobster-rs.exe lobster-rs-${{ matrix.os }}-${{ matrix.arch }}.exe
-
+          
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: lobster-rs-${{ matrix.os }}-${{ matrix.arch }}
           path: target/${{ matrix.target }}/release/lobster-rs-*
-
+          
   release:
     needs: build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
+      
       - name: Download Artifacts
         uses: actions/download-artifact@v4
         with:
           pattern: lobster-rs-*
           merge-multiple: true
-
+          
       - name: Create GitHub Release
         id: create_release
         uses: actions/create-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: "release-${{ github.run_number }}-${{ github.event.after }}"
-          release_name: "Release ${{ github.run_number }}"
+          tag_name: ${{ github.ref }}
+          release_name: Release ${{ github.ref }}
           draft: false
           prerelease: false
-
+          
       - name: Upload binaries to release
         uses: svenstaro/upload-release-action@v2
         with:
