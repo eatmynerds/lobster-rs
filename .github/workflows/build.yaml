@@ -102,6 +102,10 @@ jobs:
           name: lobster-${{ matrix.target }}
           path: lobster-rs/lobster-${{ matrix.target }}*
 
+      - name: Set Output for Matrix Target
+        id: set-output
+        run: echo "target=${{ matrix.target }}" >> $GITHUB_ENV
+
   release:
     runs-on: ubuntu-latest
     needs: build
@@ -132,7 +136,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: lobster-rs/lobster-${{ matrix.target }}  # Specify the exact file here
-          asset_name: lobster-${{ matrix.target }}  # Ensure the asset name is correct
+          asset_path: lobster-rs/lobster-${{ needs.build.outputs.target }}  # Use the output here
+          asset_name: lobster-${{ needs.build.outputs.target }}  # Same for the asset name
           asset_content_type: application/octet-stream
-
