@@ -52,6 +52,7 @@ A [`lobster`](https://github.com/justchokingaround/lobster) rewrite in Rust. Wit
 ### Prerequisites
 Before you run the installer you'll need the following for it to work:
 - [`jq`](https://jqlang.github.io/jq/)
+- `unzip` - As most linux distributions don't come with it by default
 
 #### Linux 
 
