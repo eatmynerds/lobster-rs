@@ -371,9 +371,9 @@ fn update() -> anyhow::Result<()> {
         .repo_owner("eatmynerds")
         .repo_name("lobster-rs")
         .bin_name(target_arch)
+        .target("lobster-rs")
         .current_version(cargo_crate_version!())
         .show_download_progress(true)
-        .target(target_dir)
         .build()?
         .update()?;
 
