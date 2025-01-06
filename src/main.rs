@@ -357,17 +357,33 @@ async fn download(
 fn update() -> anyhow::Result<()> {
     let target = env!("TARGET");
 
+    let target_dir = match target {
+        "x86_64-unknown-linux-gnu" => "x86_64-unknown-linux-gnu",
+        "aarch64-unknown-linux-gnu" => "aarch64-unknown-linux-gnu",
+        "x86_64-apple-darwin" => "x86_64-apple-darwin",
+        "aarch64-apple-darwin" => "aarch64-apple-darwin",
+        "x86_64-pc-windows-msvc" => "x86_64-pc-windows-msvc",
+        "aarch64-pc-windows-msvc" => "aarch64-pc-windows-msvc",
+        _ => return Err(anyhow::anyhow!("Unsupported target: {}", target)),
+    };
+
+    let bin_name = if cfg!(target_os = "windows") {
+        "lobster-rs.exe"
+    } else {
+        "lobster-rs"
+    };
+
     let status = self_update::backends::github::Update::configure()
         .repo_owner("eatmynerds")
         .repo_name("lobster-rs")
-        .bin_name(target)
-        .target("lobster-rs")
-        .current_version(cargo_crate_version!())
+        .bin_name(&format!("{}-{}", bin_name, target_dir)) 
+        .current_version(cargo_crate_version!()) 
         .show_download_progress(true)
+        .target(target_dir) 
         .build()?
         .update()?;
 
-    info!("Update status: `{}`!", status.version());
+    println!("Update status: Updated to version `{}`!", status.version());
 
     Ok(())
 }

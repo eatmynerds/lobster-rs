@@ -83,11 +83,24 @@ jobs:
         run: |
           cross build --release --target ${{ matrix.target }}
 
+      - name: 🗂️ Rename and organize binaries as executables
+        run: |
+          mkdir -p lobster.rs
+          # Determine the binary extension
+          if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
+            EXT=".exe"
+          else
+            EXT=""
+          fi
+          # Make the binary executable and rename
+          chmod +x target/${{ matrix.target }}/release/lobster-rs${EXT}
+          mv target/${{ matrix.target }}/release/lobster-rs${EXT} lobster.rs/lobster-${{ matrix.target }}${EXT}
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v3
         with:
-          name: ${{ matrix.target }}
-          path: target/${{ matrix.target }}/release/lobster-rs*
+          name: lobster-${{ matrix.target }}
+          path: lobster.rs/lobster-${{ matrix.target }}*
 
   release:
     runs-on: ubuntu-latest
@@ -98,7 +111,7 @@ jobs:
       - name: Download artifacts
         uses: actions/download-artifact@v3
         with:
-          path: release
+          path: lobster.rs
 
       - name: Create GitHub release ✈️
         id: create_release
@@ -113,16 +126,12 @@ jobs:
           draft: false
           prerelease: false
 
-      - name: Zip all binaries 📥
-        run: |
-          zip -r lobster-rs.zip release/*
-
-      - name: Upload zip to release 📤
+      - name: Upload binaries to release 📤
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: lobster-rs.zip
-          asset_name: lobster-rs.zip
-          asset_content_type: application/zip
+          asset_path: lobster.rs
+          asset_name: lobster.rs
+          asset_content_type: application/octet-stream
