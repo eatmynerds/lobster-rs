@@ -126,6 +126,7 @@ impl Display for Quality {
 #[clap(rename_all = "PascalCase")]
 pub enum Languages {
     Arabic,
+    Turkish,
     Danish,
     Dutch,
     English,
@@ -140,6 +141,7 @@ impl Display for Languages {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             Languages::Arabic => write!(f, "Arabic"),
+            Languages::Turkish => write!(f, "Turkish"),
             Languages::Danish => write!(f, "Danish"),
             Languages::Dutch => write!(f, "Dutch"),
             Languages::English => write!(f, "English"),
@@ -698,8 +700,8 @@ async fn main() -> anyhow::Result<()> {
         }
     }
 
-    if cfg!(target_os = "linux") {
-        if args.edit {
+    if args.edit {
+        if cfg!(not(target_os = "windows")) {
             let editor = std::env::var("EDITOR").expect("EDITOR environment variable not set");
             std::process::Command::new(editor)
                 .arg(
@@ -711,9 +713,9 @@ async fn main() -> anyhow::Result<()> {
                 .expect("Failed to open config file with editor");
 
             info!("Done editing config file.");
+        } else {
+            info!("The `edit` flag is not supported on Windows.");
         }
-    } else {
-        info!("The `edit` flag is only supported on Linux.");
     }
 
     let config = Arc::new(Config::load_config().expect("Failed to load config file"));
