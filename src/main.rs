@@ -13,7 +13,6 @@ use std::{
     str::FromStr,
     sync::Arc,
 };
-use tokio::signal;
 use tokio::time::Duration;
 
 mod cli;
@@ -154,7 +153,7 @@ impl Display for Languages {
     }
 }
 
-#[derive(Parser, Debug, Clone)]
+#[derive(Parser, Debug, Clone, Default)]
 #[clap(author, version, about = "A media streaming CLI tool", long_about = None)]
 pub struct Args {
     /// The search query or title to look for
@@ -384,12 +383,6 @@ fn update() -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn handle_ctrl_c() {
-    signal::ctrl_c()
-        .await
-        .expect("Failed to install Ctrl+C handler");
-}
-
 fn handle_stream(
     settings: Arc<Args>,
     config: Arc<Config>,
@@ -400,8 +393,6 @@ fn handle_stream(
     subtitles: Vec<String>,
     subtitle_language: Option<Languages>,
 ) -> BoxFuture<'static, anyhow::Result<()>> {
-    tokio::spawn(handle_ctrl_c());
-
     let subtitles_choice = subtitles_prompt();
 
     let (subtitles, subtitle_language) = if subtitles_choice {
@@ -450,7 +441,7 @@ fn handle_stream(
 
                 match run_choice.as_str() {
                     "Search" => {
-                        run(Arc::clone(&settings), Arc::clone(&config)).await?;
+                        run(Arc::new(Args::default()), Arc::clone(&config)).await?;
                     }
                     "Exit" => {
                         info!("Exiting...");
@@ -498,7 +489,7 @@ fn handle_stream(
 
                 match run_choice.as_str() {
                     "Search" => {
-                        run(Arc::clone(&settings), Arc::clone(&config)).await?;
+                        run(Arc::new(Args::default()), Arc::clone(&config)).await?;
                     }
                     "Exit" => {
                         std::process::exit(0);

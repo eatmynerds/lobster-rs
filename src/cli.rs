@@ -11,7 +11,11 @@ use crate::{handle_servers, launcher};
 use crate::{Args, MediaType};
 use anyhow::anyhow;
 use log::{debug, error, warn};
-use std::{io, io::Write, sync::Arc};
+use std::{
+    io,
+    io::Write,
+    sync::Arc,
+};
 
 pub fn subtitles_prompt() -> bool {
     warn!(
