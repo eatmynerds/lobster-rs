@@ -220,7 +220,7 @@ impl FlixHQHTML for FlixHQ {
                 year: release_date,
                 image,
                 duration,
-                media_type: MediaType::Tv,
+                media_type: MediaType::Movie,
             }));
         }
 
@@ -245,7 +245,7 @@ impl FlixHQHTML for FlixHQ {
                 year: release_date,
                 image,
                 duration,
-                media_type: MediaType::Tv,
+                media_type: MediaType::Movie,
             }));
         }
 
