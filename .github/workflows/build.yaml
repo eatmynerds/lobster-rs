@@ -83,24 +83,24 @@ jobs:
         run: |
           cross build --release --target ${{ matrix.target }}
 
-      - name: 🗂️ Rename and organize binaries as executables
+      - name: Rename and organize binaries as executables (Windows)
+        if: matrix.os == 'windows-latest'
         run: |
-          mkdir -p lobster.rs
-          # Determine the binary extension
-          if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
-            EXT=".exe"
-          else
-            EXT=""
-          fi
-          # Make the binary executable and rename
-          chmod +x target/${{ matrix.target }}/release/lobster-rs${EXT}
-          mv target/${{ matrix.target }}/release/lobster-rs${EXT} lobster.rs/lobster-${{ matrix.target }}${EXT}
+          mkdir -p lobster-rs
+          mv target/${{ matrix.target }}/release/lobster-rs.exe lobster-rs/lobster-${{ matrix.target }}.exe
+
+      - name: Rename and organize binaries as executables (not Windows)
+        if: matrix.os != 'windows-latest'
+        run: |
+          mkdir -p lobster-rs
+          chmod +x target/${{ matrix.target }}/release/lobster-rs
+          mv target/${{ matrix.target }}/release/lobster-rs lobster-rs/lobster-${{ matrix.target }}
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v3
         with:
           name: lobster-${{ matrix.target }}
-          path: lobster.rs/lobster-${{ matrix.target }}*
+          path: lobster-rs/lobster-${{ matrix.target }}*
 
   release:
     runs-on: ubuntu-latest
@@ -111,7 +111,7 @@ jobs:
       - name: Download artifacts
         uses: actions/download-artifact@v3
         with:
-          path: lobster.rs
+          path: lobster-rs
 
       - name: Create GitHub release ✈️
         id: create_release
@@ -132,6 +132,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: lobster.rs
-          asset_name: lobster.rs
+          asset_path: lobster-rs
+          asset_name: lobster-rs
           asset_content_type: application/octet-stream
