@@ -53,7 +53,6 @@ A [`lobster`](https://github.com/justchokingaround/lobster) rewrite in Rust. Wit
 
 ```sh
 curl -sL https://github.com/eatmynerds/lobster-rs/raw/master/install -o install && \
-chmod +x install && \
 ./install && \
 sudo mv lobster-rs /usr/local/bin/lobster-rs && \
 rm install && \
@@ -98,7 +97,6 @@ nix flake update
 
 ```sh
 curl -sL https://github.com/eatmynerds/lobster-rs/raw/master/install -o install && \
-chmod +x install && \
 ./install && \
 sudo mv lobster-rs "$(brew --prefix)"/bin/lobster-rs && \
 rm install && \
@@ -145,7 +143,6 @@ scoop install git mpv fzf
 
 ```sh
 curl -sL https://github.com/eatmynerds/lobster-rs/raw/master/install -o install && \
-chmod +x install && \
 ./install && \
 sudo mv lobster-rs /usr/local/bin/lobster-rs && \
 rm install && \
