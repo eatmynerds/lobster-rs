@@ -355,16 +355,12 @@ async fn download(
 }
 
 fn update() -> anyhow::Result<()> {
-    let bin_name = if cfg!(target_os = "linux") {
-        "lobster-rs-x86_64-unknown-linux-gnu"
-    } else {
-        "lobster-rs-x86_64-windows.exe"
-    };
+    let target = env!("TARGET");
 
     let status = self_update::backends::github::Update::configure()
         .repo_owner("eatmynerds")
         .repo_name("lobster-rs")
-        .bin_name(bin_name)
+        .bin_name(target)
         .target("lobster-rs")
         .current_version(cargo_crate_version!())
         .show_download_progress(true)
