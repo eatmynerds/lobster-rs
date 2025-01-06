@@ -355,7 +355,7 @@ async fn download(
 }
 
 fn update() -> anyhow::Result<()> {
-    let target = env!("TARGET");
+    let target = self_update::get_target();
 
     let target_dir = match target {
         "x86_64-unknown-linux-gnu" => "x86_64-unknown-linux-gnu",
