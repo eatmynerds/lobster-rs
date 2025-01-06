@@ -116,6 +116,8 @@ jobs:
       - name: Zip all binaries 📥
         run: |
           find release -type f ! -name "*.d" -exec sh -c 'cp "$1" "$(dirname "$1" | xargs basename)_$(basename "$1")"' _ {} \;
+          chmod +x *apple-darwin*
+          chmod +x *linux-gnu*
           zip -r lobster-rs.zip *lobster-rs*
 
       - name: Upload zip to release 📤
