@@ -35,21 +35,21 @@ OS=$(uname -s | tr '[:upper:]' '[:lower:]')
 ARCH=$(uname -m)
 
 case "$OS" in
-    "linux")
+    *linux*)
         if [[ "$ARCH" == "x86_64" ]]; then
             BUILD_TARGET="x86_64-unknown-linux-gnu_lobster-rs"
         else
             BUILD_TARGET="${ARCH}-unknown-linux-gnu_lobster-rs"
         fi
         ;;
-    "darwin")
+    *darwin*)
         if [[ "$ARCH" == "x86_64" ]]; then
             BUILD_TARGET="x86_64-apple-darwin_lobster-rs"
         else
             BUILD_TARGET="aarch64-apple-darwin_lobster-rs"
         fi
         ;;
-    "cygwin" | "mingw" | "msys" | "windows_nt")
+    *cygwin* | *mingw* | *msys* | *windows_nt*)
         if [[ "$ARCH" == "x86_64" ]]; then
             BUILD_TARGET="x86_64-pc-windows-msvc_lobster-rs.exe"
         else
