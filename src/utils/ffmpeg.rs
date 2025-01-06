@@ -125,12 +125,10 @@ impl FfmpegSpawn for Ffmpeg {
                 SpawnError::IOError(e)
             })?;
 
-        if exit_status.code() == Some(8) {
+        if exit_status.code() != Some(0) {
             error!("Failed to download {:?}", args.output_file);
             std::process::exit(1);
         }
-
-        println!("Exit status: {}", exit_status);
 
         Ok(())
     }
