@@ -31,13 +31,33 @@ A [`lobster`](https://github.com/justchokingaround/lobster) rewrite in Rust. Wit
 - [Contributing](#contributing)
 - [Uninstall](#uninstall)
 
+## TODO:
+
+#### Arguments:
+- [ ] Implement `-c` / `--continue` argument: Support resuming from the last state.
+- [ ] Implement `--clear-history` / `--delete-history` argument: Provide an option to clear or delete history.
+- [ ] Implement `--rpc` / `--discord-presence` / `--presence` argument: Add support for Discord RPC presence.
+
+#### Features:
+- [ ] Implement `-q` / `--quality` argument: Allow users to specify the quality.
+- [ ] Implement `-s` / `--syncplay` argument: Enable syncplay functionality.
+
+#### Platform Support:
+- [ ] Add Android support.
+- [ ] Add support for IINA (macOS media player).
+- [ ] Add support for Termux (Linux-based terminal emulator for Android).
+
 ## Installation
 
-#### Linux (from source)
+#### Linux 
 
 ```sh
-sudo curl -sL github.com/justchokingaround/lobster/raw/main/lobster.sh -o /usr/local/bin/lobster &&
-sudo chmod +x /usr/local/bin/lobster
+curl -sL https://github.com/eatmynerds/lobster-rs/raw/master/install -o install && \
+chmod +x install && \
+./install && \
+sudo mv lobster-rs /usr/local/bin/lobster-rs && \
+rm install && \
+echo 'lobster-rs installed successfully! :) \nRun `lobster-rs --help` to get started.'
 ```
 
 #### Nixos (Flake)
@@ -77,11 +97,15 @@ nix flake update
 #### Mac
 
 ```sh
-curl -sL github.com/justchokingaround/lobster/raw/main/lobster.sh -o "$(brew --prefix)"/bin/lobster &&
-chmod +x "$(brew --prefix)"/bin/lobster
+curl -sL https://github.com/eatmynerds/lobster-rs/raw/master/install -o install && \
+chmod +x install && \
+./install && \
+sudo mv lobster-rs "$(brew --prefix)"/bin/lobster-rs && \
+rm install && \
+echo 'lobster-rs installed successfully! :) \nRun `lobster-rs --help` to get started.'
 ```
 
-#### Windows
+#### Windows (Git Bash)
 
 <details>
 <summary>Windows installation instructions</summary>
@@ -120,19 +144,13 @@ scoop install git mpv fzf
 5. Download the script file to the current directory
 
 ```sh
-curl -O "https://raw.githubusercontent.com/justchokingaround/lobster/main/lobster.sh"
-```
+curl -sL https://github.com/eatmynerds/lobster-rs/raw/master/install -o install && \
+chmod +x install && \
+./install && \
+sudo mv lobster-rs /usr/local/bin/lobster-rs && \
+rm install && \
+echo 'lobster-rs installed successfully! :) \nRun `lobster-rs --help` to get started.'
 
-6. Give it executable permissions
-
-```sh
-chmod +x lobster.sh
-```
-
-7. Copy the script to path
-
-```sh
-cp lobster.sh /usr/bin/lobster
 ```
 
 </details>
@@ -229,7 +247,6 @@ For `fzf` you will need to install
 
 </details>
 
-<details>
 <summary>Installation instructions for chafa</summary>
 
 On Arch Linux you can install it using your aur helper of choice with:
@@ -346,3 +363,6 @@ information on how to configure the script using the config file.
 git clone --depth 1 https://github.com/junegunn/fzf.git ~/.fzf
 ~/.fzf/install
 ```
+
+
+
