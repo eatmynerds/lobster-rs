@@ -147,7 +147,7 @@ scoop install git mpv fzf
 curl -sL https://github.com/eatmynerds/lobster-rs/raw/master/install -o install && \
 chmod +x install && \
 ./install && \
-sudo mv lobster-rs /usr/local/bin/lobster-rs && \
+sudo mv lobster-rs /usr/bin/lobster-rs && \
 rm install && \
 echo 'lobster-rs installed successfully! :) \nRun `lobster-rs --help` to get started.'
 
