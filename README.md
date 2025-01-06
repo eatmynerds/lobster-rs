@@ -49,6 +49,10 @@ A [`lobster`](https://github.com/justchokingaround/lobster) rewrite in Rust. Wit
 
 ## Installation
 
+### Prerequisites
+Before you run the installer you'll need this for it to work:
+- [`jq`](https://jqlang.github.io/jq/)
+
 #### Linux 
 
 ```sh
