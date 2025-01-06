@@ -83,28 +83,11 @@ jobs:
         run: |
           cross build --release --target ${{ matrix.target }}
 
-      - name: Rename and organize binaries as executables (Windows)
-        if: matrix.os == 'windows-latest'
-        run: |
-          mkdir -p lobster-rs
-          mv target/${{ matrix.target }}/release/lobster-rs.exe lobster-rs/lobster-${{ matrix.target }}.exe
-
-      - name: Rename and organize binaries as executables (not Windows)
-        if: matrix.os != 'windows-latest'
-        run: |
-          mkdir -p lobster-rs
-          chmod +x target/${{ matrix.target }}/release/lobster-rs
-          mv target/${{ matrix.target }}/release/lobster-rs lobster-rs/lobster-${{ matrix.target }}
-
       - name: Upload artifacts
         uses: actions/upload-artifact@v3
         with:
-          name: lobster-${{ matrix.target }}
-          path: lobster-rs/lobster-${{ matrix.target }}*
-
-      - name: Set Output for Matrix Target
-        id: set-output
-        run: echo "target=${{ matrix.target }}" >> $GITHUB_ENV
+          name: ${{ matrix.target }}
+          path: target/${{ matrix.target }}/release/lobster-rs*
 
   release:
     runs-on: ubuntu-latest
@@ -115,7 +98,7 @@ jobs:
       - name: Download artifacts
         uses: actions/download-artifact@v3
         with:
-          path: lobster-rs
+          path: release
 
       - name: Create GitHub release ✈️
         id: create_release
@@ -130,12 +113,18 @@ jobs:
           draft: false
           prerelease: false
 
-      - name: Upload binaries to release 📤
+      - name: Zip all binaries 📥
+        run: |
+          find release -type f ! -name "*.d" -exec sh -c 'cp "$1" "$(dirname "$1" | xargs basename)_$(basename "$1")"' _ {} \;
+          zip -r lobster-rs.zip *lobster-rs*
+
+      - name: Upload zip to release 📤
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: lobster-rs/lobster-${{ needs.build.outputs.target }}  # Use the output target here
-          asset_name: lobster-${{ needs.build.outputs.target }}  # Ensure the asset name is correct
-          asset_content_type: application/octet-stream
+          asset_path: lobster-rs.zip
+          asset_name: lobster-rs.zip
+          asset_content_type: application/zip
+
