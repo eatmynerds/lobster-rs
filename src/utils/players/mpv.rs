@@ -110,10 +110,12 @@ impl MpvPlay for Mpv {
         let running = Arc::new(AtomicBool::new(true));
         let r = running.clone();
 
-        ctrlc::set_handler(move || {
+        match ctrlc::set_handler(move || {
             r.store(false, Ordering::SeqCst);
-        })
-        .expect("Error setting Ctrl-C handler");
+        }) {
+            Ok(_) => {}
+            Err(_) => {}
+        }
 
         std::process::Command::new(&self.executable)
             .args(temp_args)

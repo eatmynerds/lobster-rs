@@ -114,8 +114,12 @@ impl FfmpegSpawn for Ffmpeg {
 
         let r = running.clone();
 
-        ctrlc::set_handler(move || r.store(false, std::sync::atomic::Ordering::SeqCst))
-            .expect("Error setting Ctrl-C handler");
+        match ctrlc::set_handler(move || {
+            r.store(false, std::sync::atomic::Ordering::SeqCst);
+        }) {
+            Ok(_) => {}
+            Err(_) => {}
+        }
 
         let exit_status = std::process::Command::new(&self.executable)
             .args(temp_args)
