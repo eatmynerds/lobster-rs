@@ -166,9 +166,11 @@ lobster-rs --help
     If an argument is specified in both the config file and the command line, the command line argument will be used.
 
   Some example usages:
-    lobster-rs -i "a silent voice" --rofi
-    lobster-rs -l Spanish "fight club" -i -d
-    lobster-rs -l Spanish "blade runner" --json
+```sh
+lobster-rs -i "a silent voice" --rofi
+lobster-rs -l Spanish "fight club" -i -d
+lobster-rs -l Spanish "blade runner" --json
+```
 
 <details>
 <summary>Showcase</summary>
