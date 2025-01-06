@@ -79,7 +79,7 @@ environment.systemPackages = [
 ##### Or for run the script once use
 
 ```sh
-nix run github:eatmynerds/lobster-rs#lobster
+nix run github:eatmynerds/lobster-rs
 ```
 
 ##### Nixos (Flake) update
