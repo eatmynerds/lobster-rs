@@ -1,6 +1,6 @@
 use crate::utils::SpawnError;
-use std::{io::Write, process::Stdio};
 use log::{debug, error};
+use std::{io::Write, process::Stdio};
 
 pub struct Fzf {
     pub executable: String,

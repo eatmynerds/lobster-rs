@@ -1,12 +1,12 @@
 use crate::{Args, Languages, Provider};
 use anyhow::Context;
+use log::{debug, warn};
 use serde::{Deserialize, Serialize};
 use std::{
     fs::{self, File},
     io::Write,
     path::Path,
 };
-use log::{debug, warn};
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct Config {
