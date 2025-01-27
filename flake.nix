@@ -1,80 +1,32 @@
 {
-  description = "A CLI tool to watch movies and TV shows";
-  
-  inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
-    crane.url = "github:ipetkov/crane";
-    flake-utils.url = "github:numtide/flake-utils";
-  };
+	description = "wall-utils, a simple wallpaper utility to easily switch and select wallpapers";
+	inputs = {
+		nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
+		utils.url = "github:numtide/flake-utils";
+	};
 
-  outputs = { self, nixpkgs, crane, flake-utils, ... }:
-    flake-utils.lib.eachDefaultSystem (system:
-      let
-        pkgs = nixpkgs.legacyPackages.${system};
-        craneLib = crane.mkLib pkgs;
+	outputs = { self, nixpkgs, utils, ... }: {
+		overlays.default = final: prev: {
+			lobster-rs = final.callPackage ./build.nix {};
+		};
+	}
+	// 
+	utils.lib.eachDefaultSystem (system:
+		let pkgs = import nixpkgs {
+			inherit system;
+			overlays = [self.overlays.default];
+		};
+		in {
+			packages = {
+				inherit (pkgs) lobster-rs;
+				default = pkgs.lobster-rs;
+			};
 
-        commonArgs = {
-          src = craneLib.cleanCargoSource ./.;
-          strictDeps = true;
-          buildInputs = with pkgs; [
-            openssl
-            pkg-config
-            mpv
-            fzf
-            rofi
-            ffmpeg
-            chafa
-          ];
-          nativeBuildInputs = with pkgs; [
-            openssl.dev
-            pkg-config
-            makeWrapper
-          ];
-          LD_LIBRARY_PATH = "${pkgs.openssl.out}/lib";
-        };
-
-        cargoArtifacts = craneLib.buildDepsOnly commonArgs;
-        lobster-rs = craneLib.buildPackage (commonArgs // {
-          inherit cargoArtifacts;
-          postInstall = ''
-            wrapProgram $out/bin/lobster-rs \
-              --prefix PATH : ${pkgs.lib.makeBinPath [
-                pkgs.mpv
-                pkgs.fzf
-                pkgs.rofi
-                pkgs.ffmpeg
-                pkgs.chafa
-              ]}
-          '';
-        });
-      in {
-        packages = {
-          default = lobster-rs;
-        };
-        
-        apps.default = flake-utils.lib.mkApp {
-          drv = lobster-rs;
-        };
-        
-        devShells.default = craneLib.devShell {
-          checks = self.checks.${system};
-          packages = with pkgs; [
-            cargo
-            rustc
-            rust-analyzer
-            rustfmt
-            clippy
-            openssl
-            pkg-config
-            openssl.dev
-            mpv
-            fzf
-            rofi
-            ffmpeg
-            chafa
-          ];
-        };
-        
-        formatter = pkgs.nixpkgs-fmt;
-      });
+			devShells.default = pkgs.mkShell {
+				name = "lobster-rs";
+        buildInputs = with pkgs; [ cargo rustc rustfmt pkg-config openssl ]; 
+        nativeBuildInputs = with pkgs; [ openssl.dev ]; 
+        			};
+		}
+	);
 }
