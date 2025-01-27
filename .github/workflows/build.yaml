@@ -2,8 +2,8 @@ name: Build
 
 on:
   push:
-    branches: 
-    - master
+    tags:
+      - '*'
 
 env:
   CARGO_TERM_COLOR: always
