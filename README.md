@@ -77,7 +77,7 @@ Add this to you configuration.nix
 
 ```nix
 environment.systemPackages = [
-  inputs.lobster.packages.<architecture>.lobster
+  inputs.lobster.packages.<architecture>.default
 ];
 ```
 

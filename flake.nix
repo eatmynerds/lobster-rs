@@ -1,33 +1,25 @@
 {
-  description = "Add a description to me!";
+  description = "A CLI tool to watch movies and TV shows";
 
   inputs = {
-    nixpkgs.url = "github:nixos/nixpkgs";
-    flake-utils.url = "github:numtide/flake-utils";
+    nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
   };
 
-  outputs = { self, nixpkgs, flake-utils, ... }:
-    flake-utils.lib.eachDefaultSystem (system:
-      let
-        pkgs = nixpkgs.legacyPackages.${system};
-      in {
-        packages = {
-          lobsterRS = pkgs.rustPlatform.buildRustPackage {
-            pname = "lobster-rs";
-            version = "0.1.0";
-            src = ./.;
-            nativeBuildInputs = [ pkgs.pkg-config ];
-            buildInputs = [ pkgs.openssl ];
-            cargoLock = {
-              lockFile = ./Cargo.lock;
-            };
-            shellHook = ''
-              export PKG_CONFIG_PATH=${pkgs.openssl.dev}/lib/pkgconfig
-            '';
-          };
-        };
-
-        defaultPackage = self.packages.${system}.lobsterRS;
+  outputs = { self, nixpkgs }:
+    let
+      supportedSystems = [ "x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin" ];
+      eachSystem = nixpkgs.lib.genAttrs supportedSystems;
+      pkgsFor = eachSystem (system:
+        import nixpkgs {
+          config = { };
+          localSystem = system;
+          overlays = [ ];
+        });
+    in
+    {
+      packages = eachSystem (system: {
+        lobster-rs = pkgsFor.${system}.callPackage ./default.nix { };
+        default = self.packages.${system}.lobster-rs;
       });
+    };
 }
-
