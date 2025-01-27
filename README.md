@@ -131,7 +131,7 @@ Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
 irm get.scoop.sh | iex
 ```
 
-2. Install git,mpv and fzf
+2. Install git, mpv,and fzf
 
 ```ps
 scoop bucket add extras
@@ -154,7 +154,7 @@ chmod +x install && \
 ./install && \
 sudo mv lobster-rs /usr/bin/lobster-rs && \
 rm install && \
-echo 'lobster-rs installed successfully! :) \nRun `lobster-rs --help` to get started.'
+echo 'lobster-rs was installed successfully! :) \nRun `lobster-rs --help` to get started.'
 
 ```
 
@@ -305,7 +305,7 @@ currently supports the following providers: `Upcloud`, `Vidcloud`.
 Example use case:
 
 ```sh
-lobster -p Vidcloud "shawshank redemption"
+lobster-rs -p Vidcloud "shawshank redemption"
 ```
 
 ### `--recent` `<tv|movie>` argument
