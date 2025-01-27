@@ -73,7 +73,7 @@ Add this to your flake.nix
 inputs.lobster.url = "github:eatmynerds/lobster-rs";
 ```
 
-Add this to yout configuration.nix
+Add this to your configuration.nix
 
 ```nix
 environment.systemPackages = [
