@@ -1,32 +1,33 @@
 {
-	description = "wall-utils, a simple wallpaper utility to easily switch and select wallpapers";
-	inputs = {
-		nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
-		utils.url = "github:numtide/flake-utils";
-	};
+  description = "Add a description to me!";
 
-	outputs = { self, nixpkgs, utils, ... }: {
-		overlays.default = final: prev: {
-			lobster-rs = final.callPackage ./build.nix {};
-		};
-	}
-	// 
-	utils.lib.eachDefaultSystem (system:
-		let pkgs = import nixpkgs {
-			inherit system;
-			overlays = [self.overlays.default];
-		};
-		in {
-			packages = {
-				inherit (pkgs) lobster-rs;
-				default = pkgs.lobster-rs;
-			};
+  inputs = {
+    nixpkgs.url = "github:nixos/nixpkgs";
+    flake-utils.url = "github:numtide/flake-utils";
+  };
 
-			devShells.default = pkgs.mkShell {
-				name = "lobster-rs";
-        buildInputs = with pkgs; [ cargo rustc rustfmt pkg-config openssl ]; 
-        nativeBuildInputs = with pkgs; [ openssl.dev ]; 
-        			};
-		}
-	);
+  outputs = { self, nixpkgs, flake-utils, ... }:
+    flake-utils.lib.eachDefaultSystem (system:
+      let
+        pkgs = nixpkgs.legacyPackages.${system};
+      in {
+        packages = {
+          lobsterRS = pkgs.rustPlatform.buildRustPackage {
+            pname = "lobster-rs";
+            version = "0.1.0";
+            src = ./.;
+            nativeBuildInputs = [ pkgs.pkg-config ];
+            buildInputs = [ pkgs.openssl ];
+            cargoLock = {
+              lockFile = ./Cargo.lock;
+            };
+            shellHook = ''
+              export PKG_CONFIG_PATH=${pkgs.openssl.dev}/lib/pkgconfig
+            '';
+          };
+        };
+
+        defaultPackage = self.packages.${system}.lobsterRS;
+      });
 }
+
