@@ -390,6 +390,7 @@ fn handle_stream(
     download_dir: Option<String>,
     url: String,
     media_title: String,
+    media_id: String,
     subtitles: Vec<String>,
     subtitle_language: Option<Languages>,
 ) -> BoxFuture<'static, anyhow::Result<()>> {
@@ -460,79 +461,18 @@ fn handle_stream(
                     return Ok(());
                 }
 
-                let data_dir = dirs::data_local_dir()
-                    .expect("Failed to find local data dir!")
-                    .join("lobster-rs");
-
-                let temp_dir = std::path::PathBuf::new().join("/tmp/lobster-rs");
-
-                let watchlater_dir = temp_dir.join("watchlater");
-
-                if watchlater_dir.exists() {
-                    std::fs::remove_dir_all(&watchlater_dir)
-                        .expect("Failed to remove watchlater directory!");
-                }
-
-                std::fs::create_dir_all(&watchlater_dir)
-                    .expect("Failed to create watchlater directory!");
-
-                let response = CLIENT.get(url).send().await?.text().await?;
-
                 let mpv = Mpv::new();
 
                 mpv.play(MpvArgs {
                     url: player_url,
                     sub_files: subtitles,
-                    force_media_title: Some(media_title),
-                    watch_later_dir: Some(
-                        watchlater_dir
-                            .clone()
-                            .into_os_string()
-                            .into_string()
-                            .unwrap(),
-                    ),
+                    force_media_title: Some(media_title.clone()),
+                    watch_later_dir: Some(String::from("/tmp/lobster-rs/watchlater")),
                     write_filename_in_watch_later_config: true,
                     save_position_on_quit: true,
                     quiet: true,
                     ..Default::default()
                 })?;
-
-                let mut durations: Vec<f32> = vec![];
-
-                let re = regex::Regex::new(r#"#EXTINF:([0-9]*\.?[0-9]+),"#).unwrap();
-
-                for capture in re.captures_iter(&response) {
-                    if let Some(duration) = capture.get(1) {
-                        durations.push(duration.as_str().parse::<f32>().unwrap());
-                    }
-                }
-
-                let total_duration: f32 = durations.iter().sum();
-
-                let entries: Vec<_> = std::fs::read_dir(watchlater_dir)?
-                    .filter_map(|entry| entry.ok())
-                    .filter(|entry| entry.path().is_file())
-                    .collect();
-
-                let file_path = entries[0].path();
-
-                let watchlater_contents = std::fs::read_to_string(&file_path)?;
-
-                let mut position = watchlater_contents.split("start=").collect::<Vec<&str>>()[1]
-                    .trim()
-                    .parse::<f32>()
-                    .unwrap();
-
-                let progress = (position * 100.0) / total_duration;
-
-                let new_position = format!(
-                    "{:.2}:{:.2}:{:.2}",
-                    (position / 3600.0),
-                    (position / 60.0 % 60.0),
-                    (position % 60.0)
-                );
-
-                println!("{:#?}", new_position);
 
                 let run_choice = launcher(
                     &vec![],
@@ -673,6 +613,7 @@ pub async fn handle_servers(
                     .cloned(),
                 vidcloud_sources[0].file.to_string(),
                 media_title.to_string(),
+                media_id.to_string(),
                 selected_subtitles,
                 Some(settings.language.unwrap_or(Languages::English)),
             )
