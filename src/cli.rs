@@ -297,13 +297,26 @@ pub async fn run(settings: Arc<Args>, config: Arc<Config>) -> anyhow::Result<()>
                 });
 
             let episode_id = &tv.seasons.episodes[season_number - 1][result_index].id;
+            let episode_title = &tv.seasons.episodes[season_number - 1][result_index].title;
 
-            handle_servers(config, settings, episode_id, media_id, media_title, media_image).await?;
+            handle_servers(
+                config,
+                settings,
+                (episode_id, media_id, media_title, media_image),
+                Some((episode_id, &season_choice, episode_title)),
+            )
+            .await?;
         }
     } else {
         let episode_id = &media_id.rsplit('-').collect::<Vec<&str>>()[0];
 
-        handle_servers(config, settings, episode_id, media_id, media_title, media_image).await?;
+        handle_servers(
+            config,
+            settings,
+            (episode_id, media_id, media_title, media_image),
+            None,
+        )
+        .await?;
     }
 
     Ok(())

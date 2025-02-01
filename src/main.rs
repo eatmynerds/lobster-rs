@@ -14,6 +14,7 @@ use std::{
     sync::Arc,
 };
 use tokio::time::Duration;
+use utils::history::{save_history, save_progress};
 
 mod cli;
 use cli::{run, subtitles_prompt};
@@ -389,9 +390,8 @@ fn handle_stream(
     player: Player,
     download_dir: Option<String>,
     url: String,
-    media_title: String,
-    media_id: String,
-    media_image: String,
+    media_info: (String, String, String),
+    episode_info: Option<(String, String, String)>,
     subtitles: Vec<String>,
     subtitle_language: Option<Languages>,
 ) -> BoxFuture<'static, anyhow::Result<()>> {
@@ -409,7 +409,14 @@ fn handle_stream(
         match player {
             Player::Vlc => {
                 if let Some(download_dir) = download_dir {
-                    download(download_dir, media_title, url, subtitles, subtitle_language).await?;
+                    download(
+                        download_dir,
+                        media_info.0,
+                        url,
+                        subtitles,
+                        subtitle_language,
+                    )
+                    .await?;
 
                     info!("Download completed. Exiting...");
                     return Ok(());
@@ -420,7 +427,7 @@ fn handle_stream(
                 vlc.play(VlcArgs {
                     url,
                     input_slave: None,
-                    meta_title: Some(media_title),
+                    meta_title: Some(media_info.0),
                     ..Default::default()
                 })?;
 
@@ -456,24 +463,45 @@ fn handle_stream(
             }
             Player::Mpv => {
                 if let Some(download_dir) = download_dir {
-                    download(download_dir, media_title, url, subtitles, subtitle_language).await?;
+                    download(
+                        download_dir,
+                        media_info.0,
+                        url,
+                        subtitles,
+                        subtitle_language,
+                    )
+                    .await?;
 
                     info!("Download completed. Exiting...");
                     return Ok(());
                 }
+
+                let watchlater_dir = std::path::PathBuf::new().join("/tmp/lobster-rs/watchlater");
+
+                if watchlater_dir.exists() {
+                    std::fs::remove_dir_all(&watchlater_dir)
+                        .expect("Failed to remove watchlater directory!");
+                }
+
+                std::fs::create_dir_all(&watchlater_dir)
+                    .expect("Failed to create watchlater directory!");
 
                 let mpv = Mpv::new();
 
                 mpv.play(MpvArgs {
                     url: player_url,
                     sub_files: subtitles,
-                    force_media_title: Some(media_title.clone()),
+                    force_media_title: Some(media_info.1.clone()),
                     watch_later_dir: Some(String::from("/tmp/lobster-rs/watchlater")),
                     write_filename_in_watch_later_config: true,
                     save_position_on_quit: true,
                     quiet: true,
                     ..Default::default()
                 })?;
+
+                let (position, progress) = save_progress(url).await?;
+
+                let _ = save_history(media_info, episode_info, position, progress).await?;
 
                 let run_choice = launcher(
                     &vec![],
@@ -514,19 +542,17 @@ fn handle_stream(
 pub async fn handle_servers(
     config: Arc<Config>,
     settings: Arc<Args>,
-    episode_id: &str,
-    media_id: &str,
-    media_title: &str,
-    media_image: &str,
+    media_info: (&str, &str, &str, &str),
+    episode_info: Option<(&str, &str, &str)>,
 ) -> anyhow::Result<()> {
     debug!(
         "Fetching servers for episode_id: {}, media_id: {}",
-        episode_id, media_id
+        media_info.0, media_info.1
     );
 
     let server_results = tokio::time::timeout(
         Duration::from_secs(10),
-        FlixHQ.servers(episode_id, media_id),
+        FlixHQ.servers(media_info.0, media_info.1),
     )
     .await
     .map_err(|_| anyhow::anyhow!("Timeout while fetching servers"))??;
@@ -556,7 +582,7 @@ pub async fn handle_servers(
 
     let sources = tokio::time::timeout(
         Duration::from_secs(10),
-        FlixHQ.sources(episode_id, media_id, *server),
+        FlixHQ.sources(media_info.0, media_info.1, *server),
     )
     .await
     .map_err(|_| anyhow::anyhow!("Timeout while fetching sources"))??;
@@ -614,9 +640,12 @@ pub async fn handle_servers(
                     .and_then(|inner| inner.as_ref())
                     .cloned(),
                 vidcloud_sources[0].file.to_string(),
-                media_title.to_string(),
-                media_id.to_string(),
-                media_image.to_string(),
+                (
+                    media_info.1.to_string(),
+                    media_info.2.to_string(),
+                    media_info.3.to_string(),
+                ),
+                episode_info.map(|(a, b, c)| (a.to_string(), b.to_string(), c.to_string())),
                 selected_subtitles,
                 Some(settings.language.unwrap_or(Languages::English)),
             )
