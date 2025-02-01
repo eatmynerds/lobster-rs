@@ -391,6 +391,7 @@ fn handle_stream(
     url: String,
     media_title: String,
     media_id: String,
+    media_image: String,
     subtitles: Vec<String>,
     subtitle_language: Option<Languages>,
 ) -> BoxFuture<'static, anyhow::Result<()>> {
@@ -516,6 +517,7 @@ pub async fn handle_servers(
     episode_id: &str,
     media_id: &str,
     media_title: &str,
+    media_image: &str,
 ) -> anyhow::Result<()> {
     debug!(
         "Fetching servers for episode_id: {}, media_id: {}",
@@ -614,6 +616,7 @@ pub async fn handle_servers(
                 vidcloud_sources[0].file.to_string(),
                 media_title.to_string(),
                 media_id.to_string(),
+                media_image.to_string(),
                 selected_subtitles,
                 Some(settings.language.unwrap_or(Languages::English)),
             )

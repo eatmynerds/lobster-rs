@@ -1,10 +1,6 @@
 use crate::CLIENT;
 
 async fn save_progress(url: String, media_title: String) -> anyhow::Result<()> {
-    let data_dir = dirs::data_local_dir()
-        .expect("Failed to find local data dir!")
-        .join("lobster-rs");
-
     let watchlater_dir = std::path::PathBuf::new().join("/tmp/lobster-rs/watchlater");
 
     if watchlater_dir.exists() {
@@ -25,8 +21,6 @@ async fn save_progress(url: String, media_title: String) -> anyhow::Result<()> {
         }
     }
 
-    let total_duration: f32 = durations.iter().sum();
-
     let entries: Vec<_> = std::fs::read_dir(watchlater_dir)?
         .filter_map(|entry| entry.ok())
         .filter(|entry| entry.path().is_file())
@@ -36,12 +30,10 @@ async fn save_progress(url: String, media_title: String) -> anyhow::Result<()> {
 
     let watchlater_contents = std::fs::read_to_string(&file_path)?;
 
-    let mut position = watchlater_contents.split("start=").collect::<Vec<&str>>()[1]
+    let position = watchlater_contents.split("start=").collect::<Vec<&str>>()[1]
         .trim()
         .parse::<f32>()
         .unwrap();
-
-    let progress = (position * 100.0) / total_duration;
 
     let new_position = format!(
         "{:.2}:{:.2}:{:.2}",

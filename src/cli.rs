@@ -221,6 +221,7 @@ pub async fn run(settings: Arc<Args>, config: Arc<Config>) -> anyhow::Result<()>
     }
 
     let media_info = media_choice.split("\t").collect::<Vec<&str>>();
+    let media_image = media_info[0];
     let media_id = media_info[1];
     let media_type = media_info[2];
     let media_title = media_info[3].split('[').next().unwrap_or("").trim();
@@ -297,12 +298,12 @@ pub async fn run(settings: Arc<Args>, config: Arc<Config>) -> anyhow::Result<()>
 
             let episode_id = &tv.seasons.episodes[season_number - 1][result_index].id;
 
-            handle_servers(config, settings, episode_id, media_id, media_title).await?;
+            handle_servers(config, settings, episode_id, media_id, media_title, media_image).await?;
         }
     } else {
         let episode_id = &media_id.rsplit('-').collect::<Vec<&str>>()[0];
 
-        handle_servers(config, settings, episode_id, media_id, media_title).await?;
+        handle_servers(config, settings, episode_id, media_id, media_title, media_image).await?;
     }
 
     Ok(())
