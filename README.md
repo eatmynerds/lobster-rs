@@ -20,7 +20,7 @@ A [`lobster`](https://github.com/justchokingaround/lobster) rewrite in Rust. Wit
   - [`-l` / `--language`](#l--language-language-argument)
   - [`--rofi`](#rofi--external-menu-argument)
   - [`-p` / `--provider`](#p--provider-provider-argument)
-  - [`-q` / `--quality`](#q--quality-quality-argument-todo) (TODO)
+  - [`-q` / `--quality`](#q--quality-quality-argument-todo)
   - [`--recent`](#r--recent-tvmovie-argument)
   - [`-s` / `--syncplay`](#s--syncplay-argument-todo) (TODO)
   - [`-t` / `--trending`](#t--trending-argument)
@@ -39,7 +39,6 @@ A [`lobster`](https://github.com/justchokingaround/lobster) rewrite in Rust. Wit
 - [ ] Implement `--rpc` / `--discord-presence` / `--presence` argument: Add support for Discord RPC presence.
 
 #### Features:
-- [ ] Implement `-q` / `--quality` argument: Allow users to specify the quality.
 - [ ] Implement `-s` / `--syncplay` argument: Enable syncplay functionality.
 
 #### Platform Support:
@@ -211,7 +210,7 @@ can do so by passing an additional parameter to the `-d` or `--download`
 argument, for instance: using a full path:
 
 ```sh
-lobster-rs -d "/home/chomsky/tv_shows/rick_and_morty/" "rick and morty"
+lobster-rs -d "/home/nerds/tv_shows/rick_and_morty/" "rick and morty"
 ```
 
 or using a relative path:
@@ -305,7 +304,19 @@ currently supports the following providers: `Upcloud`, `Vidcloud`.
 Example use case:
 
 ```sh
-lobster -p Vidcloud "shawshank redemption"
+lobster-rs -p Vidcloud "shawshank redemption"
+```
+
+### `-q` / `--quality` `<quality>` argument
+
+By passing this argument, you can specify a preferred quality for the video (if
+those are present in the source). If it is not provided as an argument the quality
+will default to the highest available one.
+
+Example use case:
+
+```sh
+lobster-rs -q 720 "the godfather"
 ```
 
 ### `--recent` `<tv|movie>` argument
