@@ -288,7 +288,7 @@ pub async fn run(settings: Arc<Args>, config: Arc<Config>) -> anyhow::Result<()>
 
             let episode_choices = &tv.seasons.episodes[season_number - 1];
 
-            let result_index = episode_choices
+            let episode_number = episode_choices
                 .iter()
                 .position(|episode| episode.title == episode_choice)
                 .unwrap_or_else(|| {
@@ -296,14 +296,14 @@ pub async fn run(settings: Arc<Args>, config: Arc<Config>) -> anyhow::Result<()>
                     std::process::exit(1);
                 });
 
-            let episode_id = &tv.seasons.episodes[season_number - 1][result_index].id;
-            let episode_title = &tv.seasons.episodes[season_number - 1][result_index].title;
+            let episode_id = tv.seasons.episodes[season_number - 1][episode_number].id.clone();
+            // let episode_title = &tv.seasons.episodes[season_number - 1][result_index].title;
 
             handle_servers(
                 config,
                 settings,
-                (episode_id, media_id, media_title, media_image),
-                Some((episode_id, &season_choice, episode_title)),
+                (&episode_id, media_id, media_title, media_image),
+                Some((season_number, episode_number, tv.seasons.episodes)),
             )
             .await?;
         }

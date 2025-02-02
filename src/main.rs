@@ -3,6 +3,7 @@ use futures::future::{BoxFuture, FutureExt};
 use futures::StreamExt;
 use lazy_static::lazy_static;
 use log::{debug, error, info, warn, LevelFilter};
+use regex::Regex;
 use reqwest::Client;
 use self_update::cargo_crate_version;
 use serde::{Deserialize, Serialize};
@@ -19,7 +20,7 @@ use utils::history::{save_history, save_progress};
 mod cli;
 use cli::{run, subtitles_prompt};
 mod flixhq;
-use flixhq::flixhq::{FlixHQ, FlixHQSourceType, FlixHQSubtitles};
+use flixhq::flixhq::{FlixHQ, FlixHQEpisode, FlixHQSourceType, FlixHQSubtitles};
 mod providers;
 mod utils;
 use utils::{
@@ -79,12 +80,12 @@ impl Display for Provider {
 }
 
 #[derive(ValueEnum, Debug, Clone, Copy)]
-#[clap(rename_all = "kebab-case")]
 pub enum Quality {
-    Q240 = 240,
-    Q360 = 360,
+    #[clap(name = "480")]
     Q480 = 480,
+    #[clap(name = "720")]
     Q720 = 720,
+    #[clap(name = "1080")]
     Q1080 = 1080,
 }
 
@@ -100,8 +101,6 @@ impl FromStr for Quality {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let quality = s.parse::<u32>()?;
         Ok(match quality {
-            0..=300 => Quality::Q240,
-            301..=420 => Quality::Q360,
             421..=600 => Quality::Q480,
             601..=840 => Quality::Q720,
             841..=1200 => Quality::Q1080,
@@ -197,7 +196,7 @@ pub struct Args {
     #[clap(short, long, value_enum)]
     pub provider: Option<Provider>,
 
-    /// Specify the video quality
+    /// Specify the video quality (defaults to the highest possible quality)
     #[clap(short, long, value_enum)]
     pub quality: Option<Quality>,
 
@@ -390,13 +389,11 @@ fn handle_stream(
     player: Player,
     download_dir: Option<String>,
     url: String,
-    media_info: (String, String, String),
-    episode_info: Option<(String, String, String)>,
+    media_info: (String, String, String, String),
+    episode_info: Option<(usize, usize, Vec<Vec<FlixHQEpisode>>)>,
     subtitles: Vec<String>,
     subtitle_language: Option<Languages>,
 ) -> BoxFuture<'static, anyhow::Result<()>> {
-    let player_url = url.clone();
-
     let subtitles_choice = subtitles_prompt();
 
     let (subtitles, subtitle_language) = if subtitles_choice {
@@ -411,7 +408,7 @@ fn handle_stream(
                 if let Some(download_dir) = download_dir {
                     download(
                         download_dir,
-                        media_info.0,
+                        media_info.2,
                         url,
                         subtitles,
                         subtitle_language,
@@ -426,8 +423,7 @@ fn handle_stream(
 
                 vlc.play(VlcArgs {
                     url,
-                    input_slave: None,
-                    meta_title: Some(media_info.0),
+                    meta_title: Some(media_info.2),
                     ..Default::default()
                 })?;
 
@@ -465,7 +461,7 @@ fn handle_stream(
                 if let Some(download_dir) = download_dir {
                     download(
                         download_dir,
-                        media_info.0,
+                        media_info.2,
                         url,
                         subtitles,
                         subtitle_language,
@@ -486,12 +482,55 @@ fn handle_stream(
                 std::fs::create_dir_all(&watchlater_dir)
                     .expect("Failed to create watchlater directory!");
 
+                let input = CLIENT.get(url).send().await?.text().await?;
+
+                let url_re = Regex::new(r"https://(.+?)m3u8").unwrap();
+                let res_re = Regex::new(r"RESOLUTION=(\d+)x(\d+)").unwrap();
+
+                let url = if let Some(chosen_quality) = settings.quality {
+                    let url: String = url_re
+                        .captures_iter(&input)
+                        .zip(res_re.captures_iter(&input))
+                        .find_map(|(url_captures, res_captures)| {
+                            let resolution = &res_captures[2];
+                            let url = &url_captures[0];
+
+                            if resolution.to_string() == chosen_quality.to_string() {
+                                Some(url.to_string())
+                            } else {
+                                None
+                            }
+                        })
+                        .expect(&format!("Error quality {} not found!", chosen_quality));
+
+                    url
+                } else {
+                    let mut urls_and_resolutions: Vec<(u32, String)> = url_re
+                        .captures_iter(&input)
+                        .zip(res_re.captures_iter(&input))
+                        .filter_map(|(url_captures, res_captures)| {
+                            let resolution: u32 = res_captures[2].parse().ok()?;
+                            let url = url_captures[0].to_string();
+                            Some((resolution, url))
+                        })
+                        .collect();
+
+                    urls_and_resolutions
+                        .sort_by_key(|&(resolution, _)| std::cmp::Reverse(resolution));
+
+                    let (_, url) = urls_and_resolutions
+                        .first()
+                        .expect("Failed to find best url quality!");
+
+                    url.to_string()
+                };
+
                 let mpv = Mpv::new();
 
                 mpv.play(MpvArgs {
-                    url: player_url,
+                    url: url.clone(),
                     sub_files: subtitles,
-                    force_media_title: Some(media_info.1.clone()),
+                    force_media_title: Some(media_info.2.clone()),
                     watch_later_dir: Some(String::from("/tmp/lobster-rs/watchlater")),
                     write_filename_in_watch_later_config: true,
                     save_position_on_quit: true,
@@ -501,7 +540,7 @@ fn handle_stream(
 
                 let (position, progress) = save_progress(url).await?;
 
-                let _ = save_history(media_info, episode_info, position, progress).await?;
+                save_history(media_info, episode_info, position, progress).await?;
 
                 let run_choice = launcher(
                     &vec![],
@@ -543,7 +582,7 @@ pub async fn handle_servers(
     config: Arc<Config>,
     settings: Arc<Args>,
     media_info: (&str, &str, &str, &str),
-    episode_info: Option<(&str, &str, &str)>,
+    episode_info: Option<(usize, usize, Vec<Vec<FlixHQEpisode>>)>,
 ) -> anyhow::Result<()> {
     debug!(
         "Fetching servers for episode_id: {}, media_id: {}",
@@ -641,11 +680,12 @@ pub async fn handle_servers(
                     .cloned(),
                 vidcloud_sources[0].file.to_string(),
                 (
+                    media_info.0.to_string(),
                     media_info.1.to_string(),
                     media_info.2.to_string(),
                     media_info.3.to_string(),
                 ),
-                episode_info.map(|(a, b, c)| (a.to_string(), b.to_string(), c.to_string())),
+                episode_info.map(|(a, b, c)| (a, b, c)),
                 selected_subtitles,
                 Some(settings.language.unwrap_or(Languages::English)),
             )
@@ -751,6 +791,23 @@ async fn main() -> anyhow::Result<()> {
     let config = Arc::new(Config::load_config().expect("Failed to load config file"));
 
     let settings = Arc::new(Config::program_configuration(args, &config));
+
+    if settings.r#continue {
+        let history_file = dirs::data_local_dir()
+            .expect("Failed to find local dir")
+            .join("lobster-rs/lobster_history.txt");
+
+        if !history_file.exists() {
+            error!("History file not found!");
+            std::process::exit(1)
+        }
+
+        let x = std::fs::read_to_string(history_file).unwrap();
+
+        println!("{:#?}", x);
+        // TODO: implement choosing history entry
+        // handle_servers(config, settings, ())
+    }
 
     run(settings, config).await?;
 

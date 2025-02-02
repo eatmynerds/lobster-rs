@@ -1,4 +1,6 @@
+use crate::flixhq::flixhq::FlixHQEpisode;
 use crate::CLIENT;
+use anyhow::anyhow;
 use std::fs::OpenOptions;
 use std::io::prelude::*;
 
@@ -50,29 +52,7 @@ pub async fn save_progress(url: String) -> anyhow::Result<(String, f32)> {
     Ok((new_position, progress))
 }
 
-fn write_to_history(info: String) {
-    std::fs::write(
-        history_file_dir.join("lobster_history.txt"),
-        format!(
-            "{}\t{}\t{}\t{}\n",
-            media_info.1, position, media_info.0, media_info.2
-        ),
-    )?;
-    let mut file = OpenOptions::new().append(true).open("my-file").unwrap();
-
-    if let Err(e) = writeln!(file, "A new line!") {
-        eprintln!("Couldn't write to file: {}", e);
-    }
-}
-
-pub async fn save_history(
-    media_info: (String, String, String),
-    episode_info: Option<(String, String, String)>,
-    position: String,
-    progress: f32,
-) -> anyhow::Result<()> {
-    let media_type = media_info.0.split('/').collect::<Vec<&str>>()[0];
-
+fn write_to_history(info: String) -> anyhow::Result<()> {
     let history_file_dir = dirs::data_local_dir()
         .expect("Failed to find local dir")
         .join("lobster-rs");
@@ -81,23 +61,120 @@ pub async fn save_history(
         std::fs::create_dir_all(&history_file_dir)?;
     }
 
+    let history_file = history_file_dir.join("lobster_history.txt");
+
+    if !history_file.exists() {
+        std::fs::File::create(&history_file)?;
+    }
+
+    let mut file = OpenOptions::new().append(true).open(history_file).unwrap();
+    if let Err(e) = writeln!(file, "{}", info) {
+        eprintln!("Couldn't write to file: {}", e);
+    }
+
+    Ok(())
+}
+
+fn remove_from_history(media_id: String) -> anyhow::Result<()> {
+    let history_file_dir = dirs::data_local_dir()
+        .expect("Failed to find local dir")
+        .join("lobster-rs");
+
+    if !history_file_dir.exists() {
+        std::fs::create_dir_all(&history_file_dir)?;
+    }
+
+    let history_file = history_file_dir.join("lobster_history.txt");
+
+    if !history_file.exists() {
+        return Err(anyhow!("History file does not exist!"));
+    }
+
+    let mut history_file_temp = std::fs::read_to_string(&history_file)?
+        .lines()
+        .map(String::from)
+        .collect::<Vec<String>>();
+
+    if let Some(pos) = history_file_temp.iter().position(|x| x.contains(&media_id)) {
+        let _ = history_file_temp.remove(pos);
+    } else {
+        return Err(anyhow!("Episode does not exist in history file yet!"));
+    }
+
+    std::fs::write(history_file, history_file_temp.join("\n"))?;
+
+    Ok(())
+}
+
+pub async fn save_history(
+    media_info: (String, String, String, String),
+    episode_info: Option<(usize, usize, Vec<Vec<FlixHQEpisode>>)>,
+    position: String,
+    progress: f32,
+) -> anyhow::Result<()> {
+    let media_type = media_info.1.split('/').collect::<Vec<&str>>()[0];
+
     match media_type {
         "movie" => {
             if progress > 90.0 {
-                // TODO: Remove the movie from the history file
-                todo!()
-            }
-        }
-        "tv" => {
-            if progress > 90.0 {
-                todo!()
+                if remove_from_history(media_info.0.clone()).is_ok() {
+                } else {
+                    write_to_history(format!(
+                        "{}\t{}\t{}\t{}",
+                        media_info.1, position, media_info.0, media_info.2
+                    ))?;
+                }
+
+                return Ok(());
             }
 
-            println!("{:#?}", episode_info);
+            write_to_history(format!(
+                "{}\t{}\t{}\t{}",
+                media_info.1, position, media_info.0, media_info.2
+            ))?;
         }
-        _ => {
-            todo!()
+        "tv" => {
+            if let Some((mut season_number, mut episode_number, episodes)) = episode_info {
+                if progress > 90.0 {
+                    episode_number += 1;
+
+                    if episode_number >= episodes[season_number - 1].len() {
+                        if season_number < episodes.len() {
+                            season_number += 1;
+                            episode_number = 0;
+                        }
+                    }
+
+                    if remove_from_history(media_info.0.clone()).is_ok() {
+                    } else {
+                        write_to_history(format!(
+                            "{}\t{}\t{}\t{}\t{}\t{}\t{}",
+                            media_info.2,
+                            position,
+                            media_info.1,
+                            media_info.0,
+                            season_number,
+                            episodes[season_number - 1][episode_number].title,
+                            media_info.3
+                        ))?;
+                    }
+
+                    return Ok(());
+                }
+
+                write_to_history(format!(
+                    "{}\t{}\t{}\t{}\t{}\t{}\t{}",
+                    media_info.2,
+                    position,
+                    media_info.1,
+                    media_info.0,
+                    season_number,
+                    episodes[season_number - 1][episode_number].title,
+                    media_info.3
+                ))?;
+            }
         }
+        _ => return Err(anyhow!("Unknown media type!")),
     }
 
     Ok(())
