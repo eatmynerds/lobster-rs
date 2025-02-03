@@ -103,6 +103,136 @@ pub fn get_input(rofi: bool) -> anyhow::Result<String> {
 }
 
 pub async fn run(settings: Arc<Args>, config: Arc<Config>) -> anyhow::Result<()> {
+    if settings.r#continue {
+        let history_file = dirs::data_local_dir()
+            .expect("Failed to find local dir")
+            .join("lobster-rs/lobster_history.txt");
+
+        if !history_file.exists() {
+            error!("History file not found!");
+            std::process::exit(1)
+        }
+
+        let history_text = std::fs::read_to_string(history_file).unwrap();
+
+        let mut history_choices: Vec<String> = vec![];
+        let mut history_image_files: Vec<(String, String, String)> = vec![];
+        let history_entries = history_text.split("\n").collect::<Vec<&str>>();
+        for (i, history_entry) in history_entries.iter().enumerate() {
+            if i == history_entries.len() - 1 {
+                break;
+            }
+
+            let entries = history_entry.split("\t").collect::<Vec<&str>>();
+            let title = entries[0];
+            let media_type = entries[2].split('/').collect::<Vec<&str>>()[0];
+            match media_type {
+                "tv" => {
+                    let temp_episode = entries[5].replace(":", "");
+
+                    let episode_number = temp_episode
+                        .split_whitespace()
+                        .nth(1)
+                        .expect("Failed to parse episode number from history!");
+
+                    if settings.image_preview {
+                        history_image_files.push((
+                            format!("{} {} {}", title, entries[4], entries[5]),
+                            entries[6].to_string(),
+                            entries[3].to_string(),
+                        ))
+                    }
+
+                    history_choices.push(format!(
+                        "{} (tv) Season {} {}\t{}\t{}\t{}\t{}\t{}\t{}",
+                        title,
+                        entries[4],
+                        entries[5],
+                        entries[3],
+                        entries[2],
+                        entries[6],
+                        entries[4],
+                        episode_number,
+                        title,
+                    ))
+                }
+                "movie" => {
+                    let episode_id = entries[2].rsplit("-").collect::<Vec<&str>>()[0];
+
+                    if settings.image_preview {
+                        history_image_files.push((
+                            title.to_string(),
+                            entries[3].to_string(),
+                            entries[2].to_string(),
+                        ))
+                    }
+
+                    history_choices.push(format!(
+                        "{} (movie)\t{}\t{}\t{}",
+                        title, episode_id, entries[2], entries[3]
+                    ))
+                }
+                _ => {}
+            }
+        }
+
+        let history_choice = launcher(
+            &history_image_files,
+            settings.rofi,
+            &mut RofiArgs {
+                mesg: Some("Choose an entry: ".to_string()),
+                process_stdin: Some(history_choices.join("\n")),
+                dmenu: true,
+                case_sensitive: true,
+                entry_prompt: Some("".to_string()),
+                display_columns: Some(1),
+                ..Default::default()
+            },
+            &mut FzfArgs {
+                prompt: Some("Choose an entry: ".to_string()),
+                process_stdin: Some(history_choices.join("\n")),
+                reverse: true,
+                with_nth: Some("1".to_string()),
+                delimiter: Some("\t".to_string()),
+                ..Default::default()
+            },
+        )
+        .await;
+
+        let entry = history_choice.split("\t").collect::<Vec<&str>>();
+        let media_type = entry[2].split('/').collect::<Vec<&str>>()[0];
+        match media_type {
+            "tv" => {
+                let show_info = FlixHQ.info(entry[2]).await?;
+                if let FlixHQInfo::Tv(tv) = show_info {
+                    let season_number = entry[4]
+                        .parse::<usize>()
+                        .expect("Failed to parse season number!");
+                    let episode_number = entry[5]
+                        .parse::<usize>()
+                        .expect("Failed to parse episode number!");
+                    handle_servers(
+                        config.clone(),
+                        settings.clone(),
+                        (entry[1], entry[2], entry[6], entry[3]),
+                        Some((season_number, episode_number, tv.seasons.episodes)),
+                    )
+                    .await?;
+                }
+            }
+            "movie" => {
+                handle_servers(
+                    config.clone(),
+                    settings.clone(),
+                    (entry[1], entry[2], entry[0], entry[3]),
+                    None,
+                )
+                .await?
+            }
+            _ => {}
+        }
+    }
+
     let results = if let Some(recent) = &settings.recent {
         match recent {
             MediaType::Movie => FlixHQ.recent_movies().await?,
@@ -296,8 +426,9 @@ pub async fn run(settings: Arc<Args>, config: Arc<Config>) -> anyhow::Result<()>
                     std::process::exit(1);
                 });
 
-            let episode_id = tv.seasons.episodes[season_number - 1][episode_number].id.clone();
-            // let episode_title = &tv.seasons.episodes[season_number - 1][result_index].title;
+            let episode_id = tv.seasons.episodes[season_number - 1][episode_number]
+                .id
+                .clone();
 
             handle_servers(
                 config,

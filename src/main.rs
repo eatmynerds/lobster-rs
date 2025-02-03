@@ -1,3 +1,4 @@
+use anyhow::anyhow;
 use clap::{Parser, ValueEnum};
 use futures::future::{BoxFuture, FutureExt};
 use futures::StreamExt;
@@ -16,6 +17,7 @@ use std::{
 };
 use tokio::time::Duration;
 use utils::history::{save_history, save_progress};
+use utils::image_preview::remove_desktop_and_tmp;
 
 mod cli;
 use cli::{run, subtitles_prompt};
@@ -221,7 +223,7 @@ pub struct Args {
     pub debug: bool,
 }
 
-fn fzf_launcher<'a>(args: &'a mut FzfArgs) -> String {
+fn fzf_launcher<'a>(args: &'a mut FzfArgs) -> anyhow::Result<String> {
     debug!("Launching fzf with arguments: {:?}", args);
 
     let mut fzf = Fzf::new();
@@ -239,14 +241,13 @@ fn fzf_launcher<'a>(args: &'a mut FzfArgs) -> String {
         });
 
     if output.is_empty() {
-        error!("No selection made. Exiting...");
-        std::process::exit(1)
+        return Err(anyhow!("No selection made. Exiting..."));
     }
 
-    output
+    Ok(output)
 }
 
-fn rofi_launcher<'a>(args: &'a mut RofiArgs) -> String {
+fn rofi_launcher<'a>(args: &'a mut RofiArgs) -> anyhow::Result<String> {
     debug!("Launching rofi with arguments: {:?}", args);
 
     let mut rofi = Rofi::new();
@@ -264,11 +265,10 @@ fn rofi_launcher<'a>(args: &'a mut RofiArgs) -> String {
         });
 
     if output.is_empty() {
-        error!("No selection made. Exiting...");
-        std::process::exit(1)
+        return Err(anyhow!("No selection made. Exiting..."));
     }
 
-    output
+    Ok(output)
 }
 
 async fn launcher(
@@ -324,10 +324,34 @@ async fn launcher(
 
     if rofi {
         debug!("Using rofi launcher.");
-        rofi_launcher(rofi_args)
+        match rofi_launcher(rofi_args) {
+            Ok(output) => output,
+            Err(_) => {
+                if !image_preview_files.is_empty() {
+                    for (_, _, media_id) in image_preview_files {
+                        remove_desktop_and_tmp(media_id.to_string())
+                            .expect("Failed to remove old .desktop files & tmp images");
+                    }
+                }
+
+                std::process::exit(1)
+            }
+        }
     } else {
         debug!("Using fzf launcher.");
-        fzf_launcher(fzf_args)
+        match fzf_launcher(fzf_args) {
+            Ok(output) => output,
+            Err(_) => {
+                if !image_preview_files.is_empty() {
+                    for (_, _, media_id) in image_preview_files {
+                        remove_desktop_and_tmp(media_id.to_string())
+                            .expect("Failed to remove old .desktop files & tmp images");
+                    }
+                }
+
+                std::process::exit(1)
+            }
+        }
     }
 }
 
@@ -538,9 +562,11 @@ fn handle_stream(
                     ..Default::default()
                 })?;
 
-                let (position, progress) = save_progress(url).await?;
+                if config.history {
+                    let (position, progress) = save_progress(url).await?;
 
-                save_history(media_info, episode_info, position, progress).await?;
+                    save_history(media_info, episode_info, position, progress).await?;
+                }
 
                 let run_choice = launcher(
                     &vec![],
@@ -791,23 +817,6 @@ async fn main() -> anyhow::Result<()> {
     let config = Arc::new(Config::load_config().expect("Failed to load config file"));
 
     let settings = Arc::new(Config::program_configuration(args, &config));
-
-    if settings.r#continue {
-        let history_file = dirs::data_local_dir()
-            .expect("Failed to find local dir")
-            .join("lobster-rs/lobster_history.txt");
-
-        if !history_file.exists() {
-            error!("History file not found!");
-            std::process::exit(1)
-        }
-
-        let x = std::fs::read_to_string(history_file).unwrap();
-
-        println!("{:#?}", x);
-        // TODO: implement choosing history entry
-        // handle_servers(config, settings, ())
-    }
 
     run(settings, config).await?;
 

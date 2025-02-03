@@ -121,7 +121,7 @@ pub async fn save_history(
                 } else {
                     write_to_history(format!(
                         "{}\t{}\t{}\t{}",
-                        media_info.1, position, media_info.0, media_info.2
+                        media_info.2, position, media_info.1, media_info.3
                     ))?;
                 }
 
@@ -130,7 +130,7 @@ pub async fn save_history(
 
             write_to_history(format!(
                 "{}\t{}\t{}\t{}",
-                media_info.1, position, media_info.0, media_info.2
+                media_info.2, position, media_info.1, media_info.3
             ))?;
         }
         "tv" => {

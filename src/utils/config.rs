@@ -16,7 +16,6 @@ pub struct Config {
     pub subs_language: Languages,
     pub player: String,
     pub history: bool,
-    pub histfile: String,
     pub image_preview: bool,
     pub debug: bool,
 }
@@ -30,20 +29,12 @@ impl Config {
             .expect("Failed to convert path to str")
             .to_string();
 
-        let histfile = format!(
-            "{}/lobster/lobster_history.txt",
-            dirs::config_dir()
-                .expect("Failed to get configuration directory")
-                .display()
-        );
-
         Self {
             player: String::from("mpv"),
             download: download_dir,
             provider: Provider::Vidcloud,
             history: false,
             subs_language: Languages::English,
-            histfile,
             use_external_menu: false,
             image_preview: false,
             debug: false,
