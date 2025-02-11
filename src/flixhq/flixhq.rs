@@ -52,7 +52,7 @@ pub struct FlixHQResult {
     pub media_type: Option<MediaType>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct FlixHQEpisode {
     pub id: String,
     pub title: String,

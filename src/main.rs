@@ -15,7 +15,6 @@ use std::{
     str::FromStr,
     sync::Arc,
 };
-use tokio::time::Duration;
 use utils::history::{save_history, save_progress};
 use utils::image_preview::remove_desktop_and_tmp;
 
@@ -419,11 +418,12 @@ fn handle_stream(
     subtitle_language: Option<Languages>,
 ) -> BoxFuture<'static, anyhow::Result<()>> {
     let subtitles_choice = subtitles_prompt();
+    let player_url = url.clone();
 
     let (subtitles, subtitle_language) = if subtitles_choice {
-        (Some(subtitles), subtitle_language)
+        (subtitles, subtitle_language)
     } else {
-        (None, None)
+        (vec![], None)
     };
 
     async move {
@@ -434,7 +434,7 @@ fn handle_stream(
                         download_dir,
                         media_info.2,
                         url,
-                        subtitles,
+                        Some(subtitles),
                         subtitle_language,
                     )
                     .await?;
@@ -487,7 +487,7 @@ fn handle_stream(
                         download_dir,
                         media_info.2,
                         url,
-                        subtitles,
+                        Some(subtitles),
                         subtitle_language,
                     )
                     .await?;
@@ -553,7 +553,7 @@ fn handle_stream(
 
                 mpv.play(MpvArgs {
                     url: url.clone(),
-                    sub_files: subtitles,
+                    sub_files: Some(subtitles.clone()),
                     force_media_title: Some(media_info.2.clone()),
                     watch_later_dir: Some(String::from("/tmp/lobster-rs/watchlater")),
                     write_filename_in_watch_later_config: true,
@@ -562,10 +562,17 @@ fn handle_stream(
                     ..Default::default()
                 })?;
 
+                let process_stdin = if media_info.1.starts_with("tv/") {
+                    Some("Next Episode\nPrevious Episode\nReplay\nExit\nSearch".to_string())
+                } else {
+                    Some("Replay\nExit\nSearch".to_string())
+                };
+
                 if config.history {
                     let (position, progress) = save_progress(url).await?;
 
-                    save_history(media_info, episode_info, position, progress).await?;
+                    save_history(media_info.clone(), episode_info.clone(), position, progress)
+                        .await?;
                 }
 
                 let run_choice = launcher(
@@ -573,14 +580,14 @@ fn handle_stream(
                     settings.rofi,
                     &mut RofiArgs {
                         mesg: Some("Select: ".to_string()),
-                        process_stdin: Some("Exit\nSearch".to_string()),
+                        process_stdin: process_stdin.clone(),
                         dmenu: true,
                         case_sensitive: true,
                         ..Default::default()
                     },
                     &mut FzfArgs {
                         prompt: Some("Select: ".to_string()),
-                        process_stdin: Some("Exit\nSearch".to_string()),
+                        process_stdin,
                         reverse: true,
                         ..Default::default()
                     },
@@ -588,13 +595,59 @@ fn handle_stream(
                 .await;
 
                 match run_choice.as_str() {
+                    "Next Episode" => {
+                        handle_servers(
+                            config.clone(),
+                            settings.clone(),
+                            Some(true),
+                            (
+                                media_info.0.as_str(),
+                                media_info.1.as_str(),
+                                media_info.2.as_str(),
+                                media_info.3.as_str(),
+                            ),
+                            dbg!(episode_info),
+                        )
+                        .await?;
+                    }
+                    "Previous Episode" => {
+                        handle_servers(
+                            config.clone(),
+                            settings.clone(),
+                            Some(false),
+                            (
+                                media_info.0.as_str(),
+                                media_info.1.as_str(),
+                                media_info.2.as_str(),
+                                media_info.3.as_str(),
+                            ),
+                            episode_info,
+                        )
+                        .await?;
+                    }
                     "Search" => {
                         run(Arc::new(Args::default()), Arc::clone(&config)).await?;
+                    }
+                    "Replay" => {
+                        handle_stream(
+                            settings.clone(),
+                            config.clone(),
+                            player,
+                            download_dir,
+                            player_url,
+                            media_info,
+                            episode_info,
+                            subtitles,
+                            subtitle_language,
+                        )
+                        .await?;
                     }
                     "Exit" => {
                         std::process::exit(0);
                     }
-                    _ => {}
+                    _ => {
+                        unreachable!("You shouldn't be here...")
+                    }
                 }
             }
         }
@@ -607,6 +660,7 @@ fn handle_stream(
 pub async fn handle_servers(
     config: Arc<Config>,
     settings: Arc<Args>,
+    next_episode: Option<bool>,
     media_info: (&str, &str, &str, &str),
     episode_info: Option<(usize, usize, Vec<Vec<FlixHQEpisode>>)>,
 ) -> anyhow::Result<()> {
@@ -615,12 +669,62 @@ pub async fn handle_servers(
         media_info.0, media_info.1
     );
 
-    let server_results = tokio::time::timeout(
-        Duration::from_secs(10),
-        FlixHQ.servers(media_info.0, media_info.1),
-    )
-    .await
-    .map_err(|_| anyhow::anyhow!("Timeout while fetching servers"))??;
+    let (episode_id, server_results) = if let Some(next_episode) = next_episode {
+        let episode_info = episode_info.clone().expect("Failed to get episode info");
+        let mut episode_number = dbg!(episode_info.1); // Current episode
+        let mut season_number = dbg!(episode_info.0); // Current season
+
+        let total_seasons = episode_info.2.len();
+
+        if next_episode {
+            let total_episodes = episode_info.2[season_number - 1].len();
+
+            if episode_number < total_episodes {
+                // Move to next episode
+                episode_number += 1;
+            } else if season_number < total_seasons {
+                // Move to the first episode of the next season
+                season_number += 1;
+                episode_number = 1;
+            } else {
+                // No next episode or season available, staying at the last episode
+                eprintln!("No next episode or season available.");
+                std::process::exit(1);
+            }
+        } else {
+            // Move to the previous episode
+            if episode_number > 1 {
+                episode_number -= 1;
+            } else if season_number > 1 {
+                // Move to the last episode of the previous season
+                season_number -= 1;
+                episode_number = episode_info.2[season_number - 1].len();
+            } else {
+                // No previous episode available, staying at the first episode
+                eprintln!("No previous episode available.");
+                std::process::exit(1);
+            }
+        }
+
+        let episode_id = episode_info.2[season_number - 1][episode_number].id.clone();
+        println!("Episode ID: {}", episode_id);
+
+        (
+            episode_id.clone(),
+            FlixHQ
+                .servers(&episode_id, media_info.1)
+                .await
+                .map_err(|_| anyhow::anyhow!("Timeout while fetching servers"))?,
+        )
+    } else {
+        (
+            media_info.0.to_string(),
+            FlixHQ
+                .servers(media_info.0, media_info.1)
+                .await
+                .map_err(|_| anyhow::anyhow!("Timeout while fetching servers"))?,
+        )
+    };
 
     if server_results.servers.is_empty() {
         return Err(anyhow::anyhow!("No servers found"));
@@ -645,12 +749,10 @@ pub async fn handle_servers(
 
     debug!("Fetching sources for selected server: {:?}", server);
 
-    let sources = tokio::time::timeout(
-        Duration::from_secs(10),
-        FlixHQ.sources(media_info.0, media_info.1, *server),
-    )
-    .await
-    .map_err(|_| anyhow::anyhow!("Timeout while fetching sources"))??;
+    let sources = FlixHQ
+        .sources(episode_id.as_str(), media_info.1, *server)
+        .await
+        .map_err(|_| anyhow::anyhow!("Timeout while fetching sources"))?;
 
     debug!("Fetched sources: {:?}", sources);
 

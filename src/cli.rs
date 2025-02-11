@@ -214,6 +214,7 @@ pub async fn run(settings: Arc<Args>, config: Arc<Config>) -> anyhow::Result<()>
                     handle_servers(
                         config.clone(),
                         settings.clone(),
+                        None,
                         (entry[1], entry[2], entry[6], entry[3]),
                         Some((season_number, episode_number, tv.seasons.episodes)),
                     )
@@ -224,6 +225,7 @@ pub async fn run(settings: Arc<Args>, config: Arc<Config>) -> anyhow::Result<()>
                 handle_servers(
                     config.clone(),
                     settings.clone(),
+                    None,
                     (entry[1], entry[2], entry[0], entry[3]),
                     None,
                 )
@@ -433,6 +435,7 @@ pub async fn run(settings: Arc<Args>, config: Arc<Config>) -> anyhow::Result<()>
             handle_servers(
                 config,
                 settings,
+                Some(true),
                 (&episode_id, media_id, media_title, media_image),
                 Some((season_number, episode_number, tv.seasons.episodes)),
             )
@@ -444,6 +447,7 @@ pub async fn run(settings: Arc<Args>, config: Arc<Config>) -> anyhow::Result<()>
         handle_servers(
             config,
             settings,
+            None,
             (episode_id, media_id, media_title, media_image),
             None,
         )
