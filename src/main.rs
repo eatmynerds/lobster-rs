@@ -444,8 +444,7 @@ async fn url_quality(url: String, quality: Option<Quality>) -> anyhow::Result<St
             })
             .collect();
 
-        urls_and_resolutions
-            .sort_by_key(|&(resolution, _)| std::cmp::Reverse(resolution));
+        urls_and_resolutions.sort_by_key(|&(resolution, _)| std::cmp::Reverse(resolution));
 
         let (_, url) = urls_and_resolutions
             .first()
