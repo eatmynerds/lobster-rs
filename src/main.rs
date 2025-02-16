@@ -593,12 +593,6 @@ fn handle_stream(
                     Some("Replay\nExit\nSearch".to_string())
                 };
 
-                std::fs::read_to_string("/tmp/lobster-rs/watchlater/watch_later.json")
-                    .map_err(|_| anyhow!("Failed to read watch_later.json"))?
-                    .lines()
-                    .collect::<Vec<&str>>()
-                    .len();
-
                 if config.history {
                     let (position, progress) = save_progress(url).await?;
 
