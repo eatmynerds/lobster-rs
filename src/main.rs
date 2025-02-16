@@ -161,6 +161,10 @@ pub struct Args {
     #[clap(value_parser)]
     pub query: Option<String>,
 
+    /// Deletes the history file
+    #[clap(long)]
+    pub clear_history: bool,
+
     /// Continue watching from current history
     #[clap(short, long)]
     pub r#continue: bool,
@@ -406,6 +410,53 @@ fn update() -> anyhow::Result<()> {
     Ok(())
 }
 
+async fn url_quality(url: String, quality: Option<Quality>) -> anyhow::Result<String> {
+    let input = CLIENT.get(url).send().await?.text().await?;
+
+    let url_re = Regex::new(r"https://(.+?)m3u8").unwrap();
+    let res_re = Regex::new(r"RESOLUTION=(\d+)x(\d+)").unwrap();
+
+    let url = if let Some(chosen_quality) = quality {
+        let url: String = url_re
+            .captures_iter(&input)
+            .zip(res_re.captures_iter(&input))
+            .find_map(|(url_captures, res_captures)| {
+                let resolution = &res_captures[2];
+                let url = &url_captures[0];
+
+                if resolution.to_string() == chosen_quality.to_string() {
+                    Some(url.to_string())
+                } else {
+                    None
+                }
+            })
+            .expect(&format!("Error quality {} not found!", chosen_quality));
+
+        url
+    } else {
+        let mut urls_and_resolutions: Vec<(u32, String)> = url_re
+            .captures_iter(&input)
+            .zip(res_re.captures_iter(&input))
+            .filter_map(|(url_captures, res_captures)| {
+                let resolution: u32 = res_captures[2].parse().ok()?;
+                let url = url_captures[0].to_string();
+                Some((resolution, url))
+            })
+            .collect();
+
+        urls_and_resolutions
+            .sort_by_key(|&(resolution, _)| std::cmp::Reverse(resolution));
+
+        let (_, url) = urls_and_resolutions
+            .first()
+            .expect("Failed to find best url quality!");
+
+        url.to_string()
+    };
+
+    Ok(url)
+}
+
 fn handle_stream(
     settings: Arc<Args>,
     config: Arc<Config>,
@@ -420,10 +471,22 @@ fn handle_stream(
     let subtitles_choice = subtitles_prompt();
     let player_url = url.clone();
 
-    let (subtitles, subtitle_language) = if subtitles_choice {
-        (subtitles, subtitle_language)
+    let subtitles_for_player = if subtitles_choice {
+        if subtitles.len() > 0 {
+            Some(subtitles.clone())
+        } else {
+            info!("No subtitles available!");
+            None
+        }
     } else {
-        (vec![], None)
+        info!("Continuing without subtitles");
+        None
+    };
+
+    let subtitle_language = if subtitles_choice {
+        subtitle_language
+    } else {
+        None
     };
 
     async move {
@@ -434,7 +497,7 @@ fn handle_stream(
                         download_dir,
                         media_info.2,
                         url,
-                        Some(subtitles),
+                        subtitles_for_player,
                         subtitle_language,
                     )
                     .await?;
@@ -443,10 +506,13 @@ fn handle_stream(
                     return Ok(());
                 }
 
+                let url = url_quality(url, settings.quality).await?;
+
                 let vlc = Vlc::new();
 
                 vlc.play(VlcArgs {
                     url,
+                    input_slave: subtitles_for_player,
                     meta_title: Some(media_info.2),
                     ..Default::default()
                 })?;
@@ -487,7 +553,7 @@ fn handle_stream(
                         download_dir,
                         media_info.2,
                         url,
-                        Some(subtitles),
+                        subtitles_for_player.clone(),
                         subtitle_language,
                     )
                     .await?;
@@ -506,54 +572,13 @@ fn handle_stream(
                 std::fs::create_dir_all(&watchlater_dir)
                     .expect("Failed to create watchlater directory!");
 
-                let input = CLIENT.get(url).send().await?.text().await?;
-
-                let url_re = Regex::new(r"https://(.+?)m3u8").unwrap();
-                let res_re = Regex::new(r"RESOLUTION=(\d+)x(\d+)").unwrap();
-
-                let url = if let Some(chosen_quality) = settings.quality {
-                    let url: String = url_re
-                        .captures_iter(&input)
-                        .zip(res_re.captures_iter(&input))
-                        .find_map(|(url_captures, res_captures)| {
-                            let resolution = &res_captures[2];
-                            let url = &url_captures[0];
-
-                            if resolution.to_string() == chosen_quality.to_string() {
-                                Some(url.to_string())
-                            } else {
-                                None
-                            }
-                        })
-                        .expect(&format!("Error quality {} not found!", chosen_quality));
-
-                    url
-                } else {
-                    let mut urls_and_resolutions: Vec<(u32, String)> = url_re
-                        .captures_iter(&input)
-                        .zip(res_re.captures_iter(&input))
-                        .filter_map(|(url_captures, res_captures)| {
-                            let resolution: u32 = res_captures[2].parse().ok()?;
-                            let url = url_captures[0].to_string();
-                            Some((resolution, url))
-                        })
-                        .collect();
-
-                    urls_and_resolutions
-                        .sort_by_key(|&(resolution, _)| std::cmp::Reverse(resolution));
-
-                    let (_, url) = urls_and_resolutions
-                        .first()
-                        .expect("Failed to find best url quality!");
-
-                    url.to_string()
-                };
+                let url = url_quality(url, settings.quality).await?;
 
                 let mpv = Mpv::new();
 
                 mpv.play(MpvArgs {
                     url: url.clone(),
-                    sub_files: Some(subtitles.clone()),
+                    sub_files: subtitles_for_player.clone(),
                     force_media_title: Some(media_info.2.clone()),
                     watch_later_dir: Some(String::from("/tmp/lobster-rs/watchlater")),
                     write_filename_in_watch_later_config: true,
@@ -567,6 +592,12 @@ fn handle_stream(
                 } else {
                     Some("Replay\nExit\nSearch".to_string())
                 };
+
+                std::fs::read_to_string("/tmp/lobster-rs/watchlater/watch_later.json")
+                    .map_err(|_| anyhow!("Failed to read watch_later.json"))?
+                    .lines()
+                    .collect::<Vec<&str>>()
+                    .len();
 
                 if config.history {
                     let (position, progress) = save_progress(url).await?;
@@ -606,7 +637,7 @@ fn handle_stream(
                                 media_info.2.as_str(),
                                 media_info.3.as_str(),
                             ),
-                            dbg!(episode_info),
+                            episode_info,
                         )
                         .await?;
                     }
@@ -671,8 +702,8 @@ pub async fn handle_servers(
 
     let (episode_id, server_results) = if let Some(next_episode) = next_episode {
         let episode_info = episode_info.clone().expect("Failed to get episode info");
-        let mut episode_number = dbg!(episode_info.1); // Current episode
-        let mut season_number = dbg!(episode_info.0); // Current season
+        let mut episode_number = episode_info.1; // Current episode
+        let mut season_number = episode_info.0; // Current season
 
         let total_seasons = episode_info.2.len();
 
@@ -905,7 +936,7 @@ async fn main() -> anyhow::Result<()> {
                 .arg(
                     dirs::config_dir()
                         .expect("Failed to get config directory")
-                        .join("lobster_rs/config.toml"),
+                        .join("lobster-rs/config.toml"),
                 )
                 .status()
                 .expect("Failed to open config file with editor");

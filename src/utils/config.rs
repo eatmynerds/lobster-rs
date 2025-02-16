@@ -45,7 +45,7 @@ impl Config {
         debug!("Loading configuration...");
         let config_dir = dirs::config_dir().context("Failed to retrieve the config directory")?;
 
-        let config_path = format!("{}/lobster_rs/config.toml", config_dir.display());
+        let config_path = format!("{}/lobster-rs/config.toml", config_dir.display());
         debug!("Looking for config file at path: {:?}", config_path);
 
         let config = Config::load_from_file(Path::new(&config_path))?;

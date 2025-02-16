@@ -10,7 +10,7 @@ use crate::utils::{
 use crate::{handle_servers, launcher};
 use crate::{Args, MediaType};
 use anyhow::anyhow;
-use log::{debug, error, warn};
+use log::{debug, error, warn, info};
 use std::{io, io::Write, sync::Arc};
 
 pub fn subtitles_prompt() -> bool {
@@ -103,6 +103,20 @@ pub fn get_input(rofi: bool) -> anyhow::Result<String> {
 }
 
 pub async fn run(settings: Arc<Args>, config: Arc<Config>) -> anyhow::Result<()> {
+    if settings.clear_history {
+        let history_file = dirs::data_local_dir()
+            .expect("Failed to find local dir")
+            .join("lobster-rs/lobster_history.txt");
+
+        if history_file.exists() {
+            std::fs::remove_file(history_file)?;
+        }
+
+        info!("History file deleted! Exiting...");
+
+        std::process::exit(0);
+    }
+
     if settings.r#continue {
         let history_file = dirs::data_local_dir()
             .expect("Failed to find local dir")
