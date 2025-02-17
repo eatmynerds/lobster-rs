@@ -429,17 +429,17 @@ you want to contribute, please follow the following recommendations:
 ### Linux
 
 ```sh
-sudo rm $(which lobster)
+sudo rm $(which lobster-rs)
 ```
 
 ### Mac
 
 ```sh
-rm "$(brew --prefix)"/bin/lobster
+rm "$(brew --prefix)"/bin/lobster-rs
 ```
 
 ### Windows
 
 ```sh
-rm /usr/bin/lobster
+rm /usr/bin/lobster-rs
 ```
