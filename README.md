@@ -421,7 +421,7 @@ you want to contribute, please follow the following recommendations:
   issues, or by testing the script and reporting bugs
 - If you are unsure about something, please open an issue first, start a
   discussion or message me personally
-- Please use `shfmt` to format your code
+- Please use `cargo fmt` to format your code
 - If you are adding a new feature, please make sure that it is configurable
   (either through the config file and/or through command line arguments)
 
