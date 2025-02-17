@@ -411,5 +411,75 @@ information on how to configure the script using the config file.
 git clone --depth 1 https://github.com/junegunn/fzf.git ~/.fzf
 ~/.fzf/install
 ```
+## Contributing
 
+All contributions are welcome, and I will to review them as soon as possible. If
+you want to contribute, please follow the following recommendations:
 
+- All help is appreciated, even if it's just a typo fix, or a small improvement
+- You do not need to be a programmer to contribute, you can also help by opening
+  issues, or by testing the script and reporting bugs
+- You do not need to be very experienced with shell scripting to contribute, I
+  will gladly help you with any questions you might have, and I will also review
+  your code
+- If you are unsure about something, please open an issue first, start a
+  discussion or message me personally
+- Please make sure that your code is POSIX compliant (no bashisms)
+- Please make sure that your code passes `shellcheck`
+- Please use `shfmt` to format your code
+- If you are adding a new feature, please make sure that it is configurable
+  (either through the config file and/or through command line arguments)
+- I recommend reading the philosophy section of the README, to get a better
+  understanding of the project (TODO)
+
+You can find the current roadmap here, which contains TODOs and the current
+progress of the project:
+https://github.com/users/justchokingaround/projects/2/views/1?query=is%3Aopen+sort%3Aupdated-desc
+
+## Dependencies
+
+- fzf
+- curl
+- grep
+- sed
+- patch
+- awk
+- mpv
+- html-xml-utils (for fixing html encoded characters) (optional)
+- rofi (external menu)
+- socat (for getting the player position from the mpv socket)
+- vlc (optional)
+- iina (optional)
+
+### In case you don't have fzf installed, you can install it like this:
+
+```sh
+git clone --depth 1 https://github.com/junegunn/fzf.git ~/.fzf
+~/.fzf/install
+```
+
+## Uninstall
+
+### Arch Linux
+
+```sh
+paru -R lobster
+```
+
+### Linux
+
+```sh
+sudo rm $(which lobster)
+```
+
+### Mac
+
+```sh
+rm "$(brew --prefix)"/bin/lobster
+```
+
+### Windows
+
+```sh
+rm /usr/bin/lobster
+```
