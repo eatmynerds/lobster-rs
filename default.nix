@@ -22,7 +22,6 @@ rustPlatform.buildRustPackage {
     homepage = "https://github.com/eatmynerds/lobster-rs";
     license = lib.licenses.mit;
     mainProgram = "lobster-rs";
-    platforms = lib.platforms.windows ++ lib.platforms.unix;
+    platforms = lib.platforms.unix;
   };
 }
-
