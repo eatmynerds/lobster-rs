@@ -62,21 +62,21 @@ echo 'lobster-rs installed successfully! :) \nRun `lobster-rs --help` to get sta
 
 #### Nixos (Flake)
 
-Add this to your flake.nix
+Add this to you flake.nix
 
 ```nix
 inputs.lobster.url = "github:eatmynerds/lobster-rs";
 ```
 
-Add this to your configuration.nix
+Add this to you configuration.nix
 
 ```nix
 environment.systemPackages = [
-  inputs.lobster.packages.<architecture>.default
+  inputs.lobster.packages.<architecture>.lobster
 ];
 ```
 
-##### Or to run the script once use
+##### Or for run the script once use
 
 ```sh
 nix run github:eatmynerds/lobster-rs
@@ -126,7 +126,7 @@ Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
 irm get.scoop.sh | iex
 ```
 
-2. Install git, mpv,and fzf
+2. Install git,mpv and fzf
 
 ```ps
 scoop bucket add extras
@@ -149,7 +149,7 @@ chmod +x install && \
 ./install && \
 sudo mv lobster-rs /usr/bin/lobster-rs && \
 rm install && \
-echo 'lobster-rs was installed successfully! :) \nRun `lobster-rs --help` to get started.'
+echo 'lobster-rs installed successfully! :) \nRun `lobster-rs --help` to get started.'
 
 ```
 
@@ -311,6 +311,18 @@ Example use case:
 lobster-rs -p Vidcloud "shawshank redemption"
 ```
 
+### `-q` / `--quality` `<quality>` argument
+
+By passing this argument, you can specify a preferred quality for the video (if
+those are present in the source). If it is not provided as an argument the quality
+will default to the highest available one.
+
+Example use case:
+
+```sh
+lobster-rs -q 720 "the godfather"
+```
+
 ### `--recent` `<tv|movie>` argument
 
 By passing this argument, you can see watch most recently released movies and TV
@@ -399,6 +411,5 @@ information on how to configure the script using the config file.
 git clone --depth 1 https://github.com/junegunn/fzf.git ~/.fzf
 ~/.fzf/install
 ```
-
 
 
