@@ -1,8 +1,10 @@
+use anyhow::anyhow;
 use clap::{Parser, ValueEnum};
 use futures::future::{BoxFuture, FutureExt};
 use futures::StreamExt;
 use lazy_static::lazy_static;
 use log::{debug, error, info, warn, LevelFilter};
+use regex::Regex;
 use reqwest::Client;
 use self_update::cargo_crate_version;
 use serde::{Deserialize, Serialize};
@@ -13,12 +15,13 @@ use std::{
     str::FromStr,
     sync::Arc,
 };
-use tokio::time::Duration;
+use utils::history::{save_history, save_progress};
+use utils::image_preview::remove_desktop_and_tmp;
 
 mod cli;
 use cli::{run, subtitles_prompt};
 mod flixhq;
-use flixhq::flixhq::{FlixHQ, FlixHQSourceType, FlixHQSubtitles};
+use flixhq::flixhq::{FlixHQ, FlixHQEpisode, FlixHQSourceType, FlixHQSubtitles};
 mod providers;
 mod utils;
 use utils::{
@@ -78,12 +81,12 @@ impl Display for Provider {
 }
 
 #[derive(ValueEnum, Debug, Clone, Copy)]
-#[clap(rename_all = "kebab-case")]
 pub enum Quality {
-    Q240 = 240,
-    Q360 = 360,
+    #[clap(name = "480")]
     Q480 = 480,
+    #[clap(name = "720")]
     Q720 = 720,
+    #[clap(name = "1080")]
     Q1080 = 1080,
 }
 
@@ -99,8 +102,6 @@ impl FromStr for Quality {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let quality = s.parse::<u32>()?;
         Ok(match quality {
-            0..=300 => Quality::Q240,
-            301..=420 => Quality::Q360,
             421..=600 => Quality::Q480,
             601..=840 => Quality::Q720,
             841..=1200 => Quality::Q1080,
@@ -160,6 +161,10 @@ pub struct Args {
     #[clap(value_parser)]
     pub query: Option<String>,
 
+    /// Deletes the history file
+    #[clap(long)]
+    pub clear_history: bool,
+
     /// Continue watching from current history
     #[clap(short, long)]
     pub r#continue: bool,
@@ -196,7 +201,7 @@ pub struct Args {
     #[clap(short, long, value_enum)]
     pub provider: Option<Provider>,
 
-    /// Specify the video quality
+    /// Specify the video quality (defaults to the highest possible quality)
     #[clap(short, long, value_enum)]
     pub quality: Option<Quality>,
 
@@ -221,7 +226,7 @@ pub struct Args {
     pub debug: bool,
 }
 
-fn fzf_launcher<'a>(args: &'a mut FzfArgs) -> String {
+fn fzf_launcher<'a>(args: &'a mut FzfArgs) -> anyhow::Result<String> {
     debug!("Launching fzf with arguments: {:?}", args);
 
     let mut fzf = Fzf::new();
@@ -239,14 +244,13 @@ fn fzf_launcher<'a>(args: &'a mut FzfArgs) -> String {
         });
 
     if output.is_empty() {
-        error!("No selection made. Exiting...");
-        std::process::exit(1)
+        return Err(anyhow!("No selection made. Exiting..."));
     }
 
-    output
+    Ok(output)
 }
 
-fn rofi_launcher<'a>(args: &'a mut RofiArgs) -> String {
+fn rofi_launcher<'a>(args: &'a mut RofiArgs) -> anyhow::Result<String> {
     debug!("Launching rofi with arguments: {:?}", args);
 
     let mut rofi = Rofi::new();
@@ -264,11 +268,10 @@ fn rofi_launcher<'a>(args: &'a mut RofiArgs) -> String {
         });
 
     if output.is_empty() {
-        error!("No selection made. Exiting...");
-        std::process::exit(1)
+        return Err(anyhow!("No selection made. Exiting..."));
     }
 
-    output
+    Ok(output)
 }
 
 async fn launcher(
@@ -324,10 +327,34 @@ async fn launcher(
 
     if rofi {
         debug!("Using rofi launcher.");
-        rofi_launcher(rofi_args)
+        match rofi_launcher(rofi_args) {
+            Ok(output) => output,
+            Err(_) => {
+                if !image_preview_files.is_empty() {
+                    for (_, _, media_id) in image_preview_files {
+                        remove_desktop_and_tmp(media_id.to_string())
+                            .expect("Failed to remove old .desktop files & tmp images");
+                    }
+                }
+
+                std::process::exit(1)
+            }
+        }
     } else {
         debug!("Using fzf launcher.");
-        fzf_launcher(fzf_args)
+        match fzf_launcher(fzf_args) {
+            Ok(output) => output,
+            Err(_) => {
+                if !image_preview_files.is_empty() {
+                    for (_, _, media_id) in image_preview_files {
+                        remove_desktop_and_tmp(media_id.to_string())
+                            .expect("Failed to remove old .desktop files & tmp images");
+                    }
+                }
+
+                std::process::exit(1)
+            }
+        }
     }
 }
 
@@ -383,40 +410,110 @@ fn update() -> anyhow::Result<()> {
     Ok(())
 }
 
+async fn url_quality(url: String, quality: Option<Quality>) -> anyhow::Result<String> {
+    let input = CLIENT.get(url).send().await?.text().await?;
+
+    let url_re = Regex::new(r"https://(.+?)m3u8").unwrap();
+    let res_re = Regex::new(r"RESOLUTION=(\d+)x(\d+)").unwrap();
+
+    let url = if let Some(chosen_quality) = quality {
+        let url: String = url_re
+            .captures_iter(&input)
+            .zip(res_re.captures_iter(&input))
+            .find_map(|(url_captures, res_captures)| {
+                let resolution = &res_captures[2];
+                let url = &url_captures[0];
+
+                if resolution.to_string() == chosen_quality.to_string() {
+                    Some(url.to_string())
+                } else {
+                    None
+                }
+            })
+            .expect(&format!("Error quality {} not found!", chosen_quality));
+
+        url
+    } else {
+        let mut urls_and_resolutions: Vec<(u32, String)> = url_re
+            .captures_iter(&input)
+            .zip(res_re.captures_iter(&input))
+            .filter_map(|(url_captures, res_captures)| {
+                let resolution: u32 = res_captures[2].parse().ok()?;
+                let url = url_captures[0].to_string();
+                Some((resolution, url))
+            })
+            .collect();
+
+        urls_and_resolutions
+            .sort_by_key(|&(resolution, _)| std::cmp::Reverse(resolution));
+
+        let (_, url) = urls_and_resolutions
+            .first()
+            .expect("Failed to find best url quality!");
+
+        url.to_string()
+    };
+
+    Ok(url)
+}
+
 fn handle_stream(
     settings: Arc<Args>,
     config: Arc<Config>,
     player: Player,
     download_dir: Option<String>,
     url: String,
-    media_title: String,
+    media_info: (String, String, String, String),
+    episode_info: Option<(usize, usize, Vec<Vec<FlixHQEpisode>>)>,
     subtitles: Vec<String>,
     subtitle_language: Option<Languages>,
 ) -> BoxFuture<'static, anyhow::Result<()>> {
     let subtitles_choice = subtitles_prompt();
+    let player_url = url.clone();
 
-    let (subtitles, subtitle_language) = if subtitles_choice {
-        (Some(subtitles), subtitle_language)
+    let subtitles_for_player = if subtitles_choice {
+        if subtitles.len() > 0 {
+            Some(subtitles.clone())
+        } else {
+            info!("No subtitles available!");
+            None
+        }
     } else {
-        (None, None)
+        info!("Continuing without subtitles");
+        None
+    };
+
+    let subtitle_language = if subtitles_choice {
+        subtitle_language
+    } else {
+        None
     };
 
     async move {
         match player {
             Player::Vlc => {
                 if let Some(download_dir) = download_dir {
-                    download(download_dir, media_title, url, subtitles, subtitle_language).await?;
+                    download(
+                        download_dir,
+                        media_info.2,
+                        url,
+                        subtitles_for_player,
+                        subtitle_language,
+                    )
+                    .await?;
 
                     info!("Download completed. Exiting...");
                     return Ok(());
                 }
 
+                let url = url_quality(url, settings.quality).await?;
+
                 let vlc = Vlc::new();
 
                 vlc.play(VlcArgs {
                     url,
-                    input_slave: None,
-                    meta_title: Some(media_title),
+                    input_slave: subtitles_for_player,
+                    meta_title: Some(media_info.2),
                     ..Default::default()
                 })?;
 
@@ -452,35 +549,70 @@ fn handle_stream(
             }
             Player::Mpv => {
                 if let Some(download_dir) = download_dir {
-                    download(download_dir, media_title, url, subtitles, subtitle_language).await?;
+                    download(
+                        download_dir,
+                        media_info.2,
+                        url,
+                        subtitles_for_player.clone(),
+                        subtitle_language,
+                    )
+                    .await?;
 
                     info!("Download completed. Exiting...");
                     return Ok(());
                 }
 
+                let watchlater_dir = std::path::PathBuf::new().join("/tmp/lobster-rs/watchlater");
+
+                if watchlater_dir.exists() {
+                    std::fs::remove_dir_all(&watchlater_dir)
+                        .expect("Failed to remove watchlater directory!");
+                }
+
+                std::fs::create_dir_all(&watchlater_dir)
+                    .expect("Failed to create watchlater directory!");
+
+                let url = url_quality(url, settings.quality).await?;
+
                 let mpv = Mpv::new();
 
                 mpv.play(MpvArgs {
-                    url,
-                    sub_files: subtitles,
-                    force_media_title: Some(media_title),
-                    msg_level: Some("error".to_string()),
+                    url: url.clone(),
+                    sub_files: subtitles_for_player.clone(),
+                    force_media_title: Some(media_info.2.clone()),
+                    watch_later_dir: Some(String::from("/tmp/lobster-rs/watchlater")),
+                    write_filename_in_watch_later_config: true,
+                    save_position_on_quit: true,
+                    quiet: true,
                     ..Default::default()
                 })?;
+
+                let process_stdin = if media_info.1.starts_with("tv/") {
+                    Some("Next Episode\nPrevious Episode\nReplay\nExit\nSearch".to_string())
+                } else {
+                    Some("Replay\nExit\nSearch".to_string())
+                };
+
+                if config.history {
+                    let (position, progress) = save_progress(url).await?;
+
+                    save_history(media_info.clone(), episode_info.clone(), position, progress)
+                        .await?;
+                }
 
                 let run_choice = launcher(
                     &vec![],
                     settings.rofi,
                     &mut RofiArgs {
                         mesg: Some("Select: ".to_string()),
-                        process_stdin: Some("Exit\nSearch".to_string()),
+                        process_stdin: process_stdin.clone(),
                         dmenu: true,
                         case_sensitive: true,
                         ..Default::default()
                     },
                     &mut FzfArgs {
                         prompt: Some("Select: ".to_string()),
-                        process_stdin: Some("Exit\nSearch".to_string()),
+                        process_stdin,
                         reverse: true,
                         ..Default::default()
                     },
@@ -488,13 +620,59 @@ fn handle_stream(
                 .await;
 
                 match run_choice.as_str() {
+                    "Next Episode" => {
+                        handle_servers(
+                            config.clone(),
+                            settings.clone(),
+                            Some(true),
+                            (
+                                media_info.0.as_str(),
+                                media_info.1.as_str(),
+                                media_info.2.as_str(),
+                                media_info.3.as_str(),
+                            ),
+                            episode_info,
+                        )
+                        .await?;
+                    }
+                    "Previous Episode" => {
+                        handle_servers(
+                            config.clone(),
+                            settings.clone(),
+                            Some(false),
+                            (
+                                media_info.0.as_str(),
+                                media_info.1.as_str(),
+                                media_info.2.as_str(),
+                                media_info.3.as_str(),
+                            ),
+                            episode_info,
+                        )
+                        .await?;
+                    }
                     "Search" => {
                         run(Arc::new(Args::default()), Arc::clone(&config)).await?;
+                    }
+                    "Replay" => {
+                        handle_stream(
+                            settings.clone(),
+                            config.clone(),
+                            player,
+                            download_dir,
+                            player_url,
+                            media_info,
+                            episode_info,
+                            subtitles,
+                            subtitle_language,
+                        )
+                        .await?;
                     }
                     "Exit" => {
                         std::process::exit(0);
                     }
-                    _ => {}
+                    _ => {
+                        unreachable!("You shouldn't be here...")
+                    }
                 }
             }
         }
@@ -507,21 +685,71 @@ fn handle_stream(
 pub async fn handle_servers(
     config: Arc<Config>,
     settings: Arc<Args>,
-    episode_id: &str,
-    media_id: &str,
-    media_title: &str,
+    next_episode: Option<bool>,
+    media_info: (&str, &str, &str, &str),
+    episode_info: Option<(usize, usize, Vec<Vec<FlixHQEpisode>>)>,
 ) -> anyhow::Result<()> {
     debug!(
         "Fetching servers for episode_id: {}, media_id: {}",
-        episode_id, media_id
+        media_info.0, media_info.1
     );
 
-    let server_results = tokio::time::timeout(
-        Duration::from_secs(10),
-        FlixHQ.servers(episode_id, media_id),
-    )
-    .await
-    .map_err(|_| anyhow::anyhow!("Timeout while fetching servers"))??;
+    let (episode_id, server_results) = if let Some(next_episode) = next_episode {
+        let episode_info = episode_info.clone().expect("Failed to get episode info");
+        let mut episode_number = episode_info.1; // Current episode
+        let mut season_number = episode_info.0; // Current season
+
+        let total_seasons = episode_info.2.len();
+
+        if next_episode {
+            let total_episodes = episode_info.2[season_number - 1].len();
+
+            if episode_number < total_episodes {
+                // Move to next episode
+                episode_number += 1;
+            } else if season_number < total_seasons {
+                // Move to the first episode of the next season
+                season_number += 1;
+                episode_number = 1;
+            } else {
+                // No next episode or season available, staying at the last episode
+                eprintln!("No next episode or season available.");
+                std::process::exit(1);
+            }
+        } else {
+            // Move to the previous episode
+            if episode_number > 1 {
+                episode_number -= 1;
+            } else if season_number > 1 {
+                // Move to the last episode of the previous season
+                season_number -= 1;
+                episode_number = episode_info.2[season_number - 1].len();
+            } else {
+                // No previous episode available, staying at the first episode
+                eprintln!("No previous episode available.");
+                std::process::exit(1);
+            }
+        }
+
+        let episode_id = episode_info.2[season_number - 1][episode_number].id.clone();
+        println!("Episode ID: {}", episode_id);
+
+        (
+            episode_id.clone(),
+            FlixHQ
+                .servers(&episode_id, media_info.1)
+                .await
+                .map_err(|_| anyhow::anyhow!("Timeout while fetching servers"))?,
+        )
+    } else {
+        (
+            media_info.0.to_string(),
+            FlixHQ
+                .servers(media_info.0, media_info.1)
+                .await
+                .map_err(|_| anyhow::anyhow!("Timeout while fetching servers"))?,
+        )
+    };
 
     if server_results.servers.is_empty() {
         return Err(anyhow::anyhow!("No servers found"));
@@ -546,12 +774,10 @@ pub async fn handle_servers(
 
     debug!("Fetching sources for selected server: {:?}", server);
 
-    let sources = tokio::time::timeout(
-        Duration::from_secs(10),
-        FlixHQ.sources(episode_id, media_id, *server),
-    )
-    .await
-    .map_err(|_| anyhow::anyhow!("Timeout while fetching sources"))??;
+    let sources = FlixHQ
+        .sources(episode_id.as_str(), media_info.1, *server)
+        .await
+        .map_err(|_| anyhow::anyhow!("Timeout while fetching sources"))?;
 
     debug!("Fetched sources: {:?}", sources);
 
@@ -606,7 +832,13 @@ pub async fn handle_servers(
                     .and_then(|inner| inner.as_ref())
                     .cloned(),
                 vidcloud_sources[0].file.to_string(),
-                media_title.to_string(),
+                (
+                    media_info.0.to_string(),
+                    media_info.1.to_string(),
+                    media_info.2.to_string(),
+                    media_info.3.to_string(),
+                ),
+                episode_info.map(|(a, b, c)| (a, b, c)),
                 selected_subtitles,
                 Some(settings.language.unwrap_or(Languages::English)),
             )
@@ -698,7 +930,7 @@ async fn main() -> anyhow::Result<()> {
                 .arg(
                     dirs::config_dir()
                         .expect("Failed to get config directory")
-                        .join("lobster_rs/config.toml"),
+                        .join("lobster-rs/config.toml"),
                 )
                 .status()
                 .expect("Failed to open config file with editor");

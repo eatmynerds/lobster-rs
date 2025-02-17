@@ -1378,6 +1378,7 @@ dependencies = [
  "image",
  "lazy_static",
  "log",
+ "regex",
  "reqwest",
  "rich-logger",
  "self_update",

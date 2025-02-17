@@ -32,13 +32,19 @@ Categories=imagepreview;"#,
     debug!("Writing desktop entry to file: {:?}", desktop_file);
     std::fs::write(&desktop_file, desktop_entry)?;
 
-    debug!("Desktop entry generated successfully for media_id: {}", media_id);
+    debug!(
+        "Desktop entry generated successfully for media_id: {}",
+        media_id
+    );
 
     Ok(())
 }
 
 pub fn remove_desktop_and_tmp(media_id: String) -> anyhow::Result<()> {
-    debug!("Removing desktop entry and temporary files for media_id: {}", media_id);
+    debug!(
+        "Removing desktop entry and temporary files for media_id: {}",
+        media_id
+    );
 
     let image_preview_dir = dirs::home_dir()
         .expect("Failed to get home directory")
@@ -60,7 +66,10 @@ pub fn remove_desktop_and_tmp(media_id: String) -> anyhow::Result<()> {
         debug!("Temporary images directory does not exist: /tmp/images");
     }
 
-    debug!("Desktop entry and temporary files removed successfully for media_id: {}", media_id);
+    debug!(
+        "Desktop entry and temporary files removed successfully for media_id: {}",
+        media_id
+    );
 
     Ok(())
 }
@@ -68,7 +77,10 @@ pub fn remove_desktop_and_tmp(media_id: String) -> anyhow::Result<()> {
 pub async fn image_preview(
     images: &Vec<(String, String, String)>,
 ) -> anyhow::Result<Vec<(String, String, String)>> {
-    debug!("Starting image preview generation for {} images.", images.len());
+    debug!(
+        "Starting image preview generation for {} images.",
+        images.len()
+    );
 
     if std::fs::metadata("/tmp/images").is_ok() {
         debug!("Removing existing temporary images directory: /tmp/images");
@@ -99,11 +111,7 @@ pub async fn image_preview(
         match image::load_from_memory(&image_bytes) {
             Ok(image) => {
                 image.save(&output_path)?;
-                temp_images.push((
-                    media_name.to_string(),
-                    media_id.to_string(),
-                    output_path,
-                ));
+                temp_images.push((media_name.to_string(), media_id.to_string(), output_path));
                 debug!("Image saved successfully for media_id: {}", media_id);
             }
             Err(e) => {

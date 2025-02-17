@@ -1,12 +1,12 @@
 use crate::{Args, Languages, Provider};
 use anyhow::Context;
+use log::{debug, warn};
 use serde::{Deserialize, Serialize};
 use std::{
     fs::{self, File},
     io::Write,
     path::Path,
 };
-use log::{debug, warn};
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct Config {
@@ -16,7 +16,6 @@ pub struct Config {
     pub subs_language: Languages,
     pub player: String,
     pub history: bool,
-    pub histfile: String,
     pub image_preview: bool,
     pub debug: bool,
 }
@@ -30,20 +29,12 @@ impl Config {
             .expect("Failed to convert path to str")
             .to_string();
 
-        let histfile = format!(
-            "{}/lobster/lobster_history.txt",
-            dirs::config_dir()
-                .expect("Failed to get configuration directory")
-                .display()
-        );
-
         Self {
             player: String::from("mpv"),
             download: download_dir,
             provider: Provider::Vidcloud,
             history: false,
             subs_language: Languages::English,
-            histfile,
             use_external_menu: false,
             image_preview: false,
             debug: false,
@@ -54,7 +45,7 @@ impl Config {
         debug!("Loading configuration...");
         let config_dir = dirs::config_dir().context("Failed to retrieve the config directory")?;
 
-        let config_path = format!("{}/lobster_rs/config.toml", config_dir.display());
+        let config_path = format!("{}/lobster-rs/config.toml", config_dir.display());
         debug!("Looking for config file at path: {:?}", config_path);
 
         let config = Config::load_from_file(Path::new(&config_path))?;

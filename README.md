@@ -10,36 +10,31 @@ A [`lobster`](https://github.com/justchokingaround/lobster) rewrite in Rust. Wit
   - [Mac](#mac)
   - [Windows](#windows)
 - [Usage](#usage)
-  - [`-c` / `--continue`](#c--continue-argument-todo) (TODO)
-  - [`--clear-history / --delete-history`](#clear-history--delete-history-argument-todo) (TODO)
-  - [`-d` / `--download`](#d--download-path-argument)
-  - [`--rpc`](#discord--discord-presence--rpc--presence-argument-todo) (TODO)
-  - [`-e` / `--edit`](#e--edit-argument)
-  - [`-i` / `--image-preview`](#i--image-preview-argument)
-  - [`-j` / `--json`](#j--json-argument)
-  - [`-l` / `--language`](#l--language-language-argument)
-  - [`--rofi`](#rofi--external-menu-argument)
-  - [`-p` / `--provider`](#p--provider-provider-argument)
-  - [`-q` / `--quality`](#q--quality-quality-argument-todo) (TODO)
-  - [`--recent`](#r--recent-tvmovie-argument)
-  - [`-s` / `--syncplay`](#s--syncplay-argument-todo) (TODO)
-  - [`-t` / `--trending`](#t--trending-argument)
-  - [`-u` / `--update`](#u-u--update-argument)
-  - [`-V` / `--version`](#v-v--version-argument)
-  - [`--debug`](#x--debug-argument)
+  - [`--clear-history`](#clear-history-argument)
+  - [`-d` / `--download`](#d----download-path-argument)
+  - [`-e` / `--edit`](#e----edit-argument)
+  - [`-i` / `--image-preview`](#i----image-preview-argument)
+  - [`-j` / `--json`](#j----json-argument)
+  - [`-l` / `--language`](#l----language-language-argument)
+  - [`--rofi`](#rofi-argument)
+  - [`-p` / `--provider`](#p----provider-provider-argument)
+  - [`-q` / `--quality`](#q----quality-quality-argument)
+  - [`--recent`](#recent-tvmovie-argument)
+  - [`-t` / `--trending`](#t----trending-tvmovie-argument)
+  - [`-c` / `--continue`](#c----continue-argument) 
+  <!-- - [`--rpc`](#discord--discord-presence--rpc--presence-argument-todo) (TODO) -->
+  <!-- - [`-s` / `--syncplay`](#s--syncplay-argument-todo) (TODO) -->
+  - [`-u` / `--update`](#u----update-argument)
+  - [`-V` / `--version`](#v----version-argument)
+  - [`--debug`](#debug-argument)
 - [Configuration](#configuration)
 - [Contributing](#contributing)
 - [Uninstall](#uninstall)
 
 ## TODO:
 
-#### Arguments:
-- [ ] Implement `-c` / `--continue` argument: Support resuming from the last state.
-- [ ] Implement `--clear-history` / `--delete-history` argument: Provide an option to clear or delete history.
-- [ ] Implement `--rpc` / `--discord-presence` / `--presence` argument: Add support for Discord RPC presence.
-
 #### Features:
-- [ ] Implement `-q` / `--quality` argument: Allow users to specify the quality.
+- [ ] Implement `--rpc` / `--discord-presence` / `--presence` argument: Add support for Discord RPC presence.
 - [ ] Implement `-s` / `--syncplay` argument: Enable syncplay functionality.
 
 #### Platform Support:
@@ -188,6 +183,14 @@ lobster-rs -l Spanish "blade runner" --json
 
 </details>
 
+### `--clear-history` argument
+
+This argument allows you to delete the history file
+
+```sh
+lobster-rs --clear-history
+```
+
 ### `-d` / `--download` `<path>` argument
 
 This option lets you use lobster as you normally would, with the exception that
@@ -211,7 +214,7 @@ can do so by passing an additional parameter to the `-d` or `--download`
 argument, for instance: using a full path:
 
 ```sh
-lobster-rs -d "/home/chomsky/tv_shows/rick_and_morty/" "rick and morty"
+lobster-rs -d "/home/nerds/tv_shows/rick_and_morty/" "rick and morty"
 ```
 
 or using a relative path:
@@ -329,6 +332,32 @@ Example use case:
 ```sh
 lobster-rs -t movie
 ```
+
+### `-c` / `--continue` argument
+
+This feature is disabled by default because it relies on history, to enable it,
+you need to change the following line in your configuration file:
+
+```sh
+history=true
+```
+
+In a similar fashion to how saving your position when you watch videos on
+YouTube or Netflix works, lobster has history support and saves the last minute
+you watched for a Movie or TV Show episode. To use this feature, simply watch a
+Movie or an Episode from a TV Show, and after you quit mpv the history will be
+automatically updated. The next time you want to resume from the last position
+watched, you can just run
+
+```sh
+lobster-rs --continue
+```
+
+which will prompt you to chose which of the saved Movies/TV Shows you'd like to
+resume from. Upon the completion of a movie or an episode, the corresponding
+entry is either deleted (in case of a movie, or the last episode of a show), or
+it is updated to the next available episode (if it's the last episode of a
+season, it will update to the first episode of the next season).
 
 ### `-u` / `--update` argument
 
