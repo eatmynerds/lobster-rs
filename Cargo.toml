@@ -9,6 +9,7 @@ clap = { version = "4.5.23", features = ["derive"] }
 crossterm = "0.28.1"
 ctrlc = "3.4.5"
 dirs = "5.0.1"
+discord-rich-presence = "0.2.5"
 futures = "0.3.31"
 image = "0.25.5"
 lazy_static = "1.5.0"

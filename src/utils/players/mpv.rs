@@ -1,6 +1,7 @@
 use crate::utils::SpawnError;
 use crossterm::style::Stylize;
 use log::{debug, error};
+use std::process::Child;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
@@ -31,19 +32,20 @@ pub struct MpvArgs {
     pub write_filename_in_watch_later_config: bool,
     pub watch_later_dir: Option<String>,
     pub input_ipc_server: Option<String>,
-    pub msg_level: Option<String>,
 }
 
 pub trait MpvPlay {
-    fn play(&self, args: MpvArgs) -> Result<(), SpawnError>;
+    fn play(&self, args: MpvArgs) -> Result<Child, SpawnError>;
 }
 
 impl MpvPlay for Mpv {
-    fn play(&self, args: MpvArgs) -> Result<(), SpawnError> {
+    fn play(&self, args: MpvArgs) -> Result<Child, SpawnError> {
         debug!("Preparing to play video with URL: {:?}", args.url);
 
         let mut temp_args = self.args.clone();
         temp_args.push(args.url.clone());
+
+        temp_args.push(String::from("--term-osd=force"));
 
         if args.quiet {
             debug!("Adding quiet flag");
@@ -53,11 +55,6 @@ impl MpvPlay for Mpv {
         if args.really_quiet {
             debug!("Adding really quiet flag");
             temp_args.push(String::from("--really-quiet"));
-        }
-
-        if let Some(msg_level) = args.msg_level {
-            debug!("Setting message level: {}", msg_level);
-            temp_args.push(format!("--msg-level=all={}", msg_level));
         }
 
         if let Some(sub_files) = args.sub_files {
@@ -119,12 +116,10 @@ impl MpvPlay for Mpv {
 
         std::process::Command::new(&self.executable)
             .args(temp_args)
-            .status()
+            .spawn()
             .map_err(|e| {
                 error!("Failed to spawn MPV process: {}", e);
                 SpawnError::IOError(e)
-            })?;
-
-        Ok(())
+            })
     }
 }
