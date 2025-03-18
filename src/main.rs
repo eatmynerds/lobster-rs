@@ -8,7 +8,6 @@ use regex::Regex;
 use reqwest::Client;
 use self_update::cargo_crate_version;
 use serde::{Deserialize, Serialize};
-use utils::presence::discord_presence;
 use std::{
     fmt::{self, Debug, Display, Formatter},
     num::ParseIntError,
@@ -18,6 +17,7 @@ use std::{
 };
 use utils::history::{save_history, save_progress};
 use utils::image_preview::remove_desktop_and_tmp;
+use utils::presence::discord_presence;
 
 mod cli;
 use cli::{run, subtitles_prompt};
@@ -83,8 +83,8 @@ impl Display for Provider {
 
 #[derive(ValueEnum, Debug, Clone, Copy)]
 pub enum Quality {
-    #[clap(name = "480")]
-    Q480 = 480,
+    #[clap(name = "360")]
+    Q360 = 360,
     #[clap(name = "720")]
     Q720 = 720,
     #[clap(name = "1080")]
@@ -103,7 +103,7 @@ impl FromStr for Quality {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let quality = s.parse::<u32>()?;
         Ok(match quality {
-            421..=600 => Quality::Q480,
+            0..=600 => Quality::Q360,
             601..=840 => Quality::Q720,
             841..=1200 => Quality::Q1080,
             _ => Quality::Q1080,
@@ -428,10 +428,11 @@ async fn url_quality(url: String, quality: Option<Quality>) -> anyhow::Result<St
                 if resolution.to_string() == chosen_quality.to_string() {
                     Some(url.to_string())
                 } else {
-                    None
+                    info!("Quality {} not found, falling back to auto", chosen_quality);
+                    Some(url.to_string())
                 }
             })
-            .expect(&format!("Error quality {} not found!", chosen_quality));
+            .expect(&format!("Unable to find url!"));
 
         url
     } else {
@@ -587,9 +588,15 @@ fn handle_stream(
                 })?;
 
                 if settings.rpc {
-                    let season_and_episode_num = episode_info.as_ref().map(|(a, b, _)| (*a, *b) );
+                    let season_and_episode_num = episode_info.as_ref().map(|(a, b, _)| (*a, *b));
 
-                    discord_presence(&media_info.2.clone(), season_and_episode_num, child, &media_info.3).await?;
+                    discord_presence(
+                        &media_info.2.clone(),
+                        season_and_episode_num,
+                        child,
+                        &media_info.3,
+                    )
+                    .await?;
                 } else {
                     child.wait()?;
                 }
