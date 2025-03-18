@@ -875,6 +875,7 @@ pub async fn handle_servers(
                 "vlc" => Player::Vlc,
                 "mpv" => Player::Mpv,
                 "syncplay" => Player::SyncPlay,
+                "iina" => Player::Iina,
                 _ => {
                     error!("Player not supported");
                     std::process::exit(1);
