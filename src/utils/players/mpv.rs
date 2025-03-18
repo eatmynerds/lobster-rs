@@ -1,7 +1,7 @@
 use crate::utils::SpawnError;
 use crossterm::style::Stylize;
 use log::{debug, error};
-use std::process::Child;
+use std::process::{Child, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
@@ -44,8 +44,6 @@ impl MpvPlay for Mpv {
 
         let mut temp_args = self.args.clone();
         temp_args.push(args.url.clone());
-
-        temp_args.push(String::from("--term-osd=force"));
 
         if args.quiet {
             debug!("Adding quiet flag");
@@ -115,6 +113,7 @@ impl MpvPlay for Mpv {
         }
 
         std::process::Command::new(&self.executable)
+            .stdout(Stdio::piped())
             .args(temp_args)
             .spawn()
             .map_err(|e| {

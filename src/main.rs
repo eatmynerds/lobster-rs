@@ -8,6 +8,7 @@ use regex::Regex;
 use reqwest::Client;
 use self_update::cargo_crate_version;
 use serde::{Deserialize, Serialize};
+use utils::presence::discord_presence;
 use std::{
     fmt::{self, Debug, Display, Formatter},
     num::ParseIntError,
@@ -17,7 +18,6 @@ use std::{
 };
 use utils::history::{save_history, save_progress};
 use utils::image_preview::remove_desktop_and_tmp;
-use utils::presence::discord_presence;
 
 mod cli;
 use cli::{run, subtitles_prompt};
@@ -576,16 +576,23 @@ fn handle_stream(
 
                 let mpv = Mpv::new();
 
-                let _ = mpv.play(MpvArgs {
+                let mut child = mpv.play(MpvArgs {
                     url: url.clone(),
                     sub_files: subtitles_for_player.clone(),
                     force_media_title: Some(media_info.2.clone()),
                     watch_later_dir: Some(String::from("/tmp/lobster-rs/watchlater")),
                     write_filename_in_watch_later_config: true,
                     save_position_on_quit: true,
-                    quiet: true,
                     ..Default::default()
                 })?;
+
+                if settings.rpc {
+                    let season_and_episode_num = episode_info.as_ref().map(|(a, b, _)| (*a, *b) );
+
+                    discord_presence(&media_info.2.clone(), season_and_episode_num, child, &media_info.3).await?;
+                } else {
+                    child.wait()?;
+                }
 
                 let process_stdin = if media_info.1.starts_with("tv/") {
                     Some("Next Episode\nPrevious Episode\nReplay\nExit\nSearch".to_string())
@@ -732,7 +739,6 @@ pub async fn handle_servers(
         }
 
         let episode_id = episode_info.2[season_number - 1][episode_number].id.clone();
-        println!("Episode ID: {}", episode_id);
 
         (
             episode_id.clone(),
@@ -897,56 +903,55 @@ fn check_dependencies() {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    discord_presence("1340948447305535592", Some("sdffkjsdff"), Some(9)).await?;
-    // let args = Args::parse();
+    let args = Args::parse();
 
-    // let log_level = if args.debug {
-    //     LevelFilter::Debug
-    // } else {
-    //     LevelFilter::Info
-    // };
+    let log_level = if args.debug {
+        LevelFilter::Debug
+    } else {
+        LevelFilter::Info
+    };
 
-    // rich_logger::init(log_level).unwrap();
+    rich_logger::init(log_level).unwrap();
 
-    // check_dependencies();
+    check_dependencies();
 
-    // if args.update {
-    //     let update_result = tokio::task::spawn_blocking(move || update()).await?;
+    if args.update {
+        let update_result = tokio::task::spawn_blocking(move || update()).await?;
 
-    //     match update_result {
-    //         Ok(_) => {
-    //             std::process::exit(0);
-    //         }
-    //         Err(e) => {
-    //             error!("Failed to update: {}", e);
-    //             std::process::exit(1);
-    //         }
-    //     }
-    // }
+        match update_result {
+            Ok(_) => {
+                std::process::exit(0);
+            }
+            Err(e) => {
+                error!("Failed to update: {}", e);
+                std::process::exit(1);
+            }
+        }
+    }
 
-    // if args.edit {
-    //     if cfg!(not(target_os = "windows")) {
-    //         let editor = std::env::var("EDITOR").expect("EDITOR environment variable not set");
-    //         std::process::Command::new(editor)
-    //             .arg(
-    //                 dirs::config_dir()
-    //                     .expect("Failed to get config directory")
-    //                     .join("lobster-rs/config.toml"),
-    //             )
-    //             .status()
-    //             .expect("Failed to open config file with editor");
+    if args.edit {
+        if cfg!(not(target_os = "windows")) {
+            let editor = std::env::var("EDITOR").expect("EDITOR environment variable not set");
+            std::process::Command::new(editor)
+                .arg(
+                    dirs::config_dir()
+                        .expect("Failed to get config directory")
+                        .join("lobster-rs/config.toml"),
+                )
+                .status()
+                .expect("Failed to open config file with editor");
 
-    //         info!("Done editing config file.");
-    //     } else {
-    //         info!("The `edit` flag is not supported on Windows.");
-    //     }
-    // }
+            info!("Done editing config file.");
+        } else {
+            info!("The `edit` flag is not supported on Windows.");
+        }
+    }
 
-    // let config = Arc::new(Config::load_config().expect("Failed to load config file"));
+    let config = Arc::new(Config::load_config().expect("Failed to load config file"));
 
-    // let settings = Arc::new(Config::program_configuration(args, &config));
+    let settings = Arc::new(Config::program_configuration(args, &config));
 
-    // run(settings, config).await?;
+    run(settings, config).await?;
 
     Ok(())
 }

@@ -1,9 +1,8 @@
-use super::players::mpv::{Mpv, MpvArgs, MpvPlay};
 use anyhow::anyhow;
-use clap::Parser;
 use discord_rich_presence::{activity, DiscordIpc, DiscordIpcClient};
 use lazy_static::lazy_static;
 use regex::Regex;
+use std::{io::{Cursor, Read}, process::Child};
 
 lazy_static! {
     static ref FILE_PATH: String = if cfg!(windows) {
@@ -13,42 +12,42 @@ lazy_static! {
     };
 }
 
-const SMALL_IMAGE: &str = "https://images-ext-1.discordapp.net/external/dUSRf56flwFeOMFjafsUhIMMS_1Xs-ptjeDHo6TWn6c/%3Fquality%3Dlossless%26size%3D48/https/cdn.discordapp.com/emojis/1138835294506975262.png";
 const PATTERN: &str = r#"(\(Paused\)\s)?AV:\s([0-9:]*) / ([0-9:]*) \(([0-9]*)%\)"#;
 
 pub async fn discord_presence(
-    id: &str,
-    title: Option<&str>,
-    episode_number: Option<usize>,
+    title: &str,
+    season_and_episode_num: Option<(usize, usize)>,
+    mut mpv_child: Child,
+    large_image: &str,
 ) -> anyhow::Result<()> {
     let mut client =
-        DiscordIpcClient::new(id).map_err(|_| anyhow!("Failed to create discord IPC client!"))?;
-
-    let new_title = title.unwrap_or("No Title");
+        DiscordIpcClient::new("1340948447305535592").map_err(|_| anyhow!("Failed to create discord IPC client!"))?;
 
     client
         .connect()
         .map_err(|_| anyhow!("Failed to connect to discord client!"))?;
 
-    let details = match (title, episode_number) {
-        (Some(title), Some(episode_number)) => format!("{} - Episode {}", title, episode_number),
-        (Some(title), None) => new_title.to_string(),
-        (None, _) => String::from("No Title"),
-    };
-
-    let mpv = Mpv::new();
-
-    let mut child = mpv.play(MpvArgs {
-        url: String::from("https://b-g-eu-1.raffaellocdn.net:2223/v3-hls-playback/5b195cf64e22d38876f75fb4464f21ba193e5a5083347d8cc79f88c4817c07ddbbc2cb498b1ab6e5f888fff540dd0c215324303d06f496228bb321cb9a0f4dcff50f51cc2d49b6d7a5897239c1eb46cf7eeba5dbe9361cc23b5690136aa698628b769ef8c423b4aa203577de67923c277594e4495f7e01dd5afd470a7d6ad38988256e234d26c584f6d7743bfd402ed4eedf22e328f9fa85d84fd1fb59d709a703fade2f591ce80283bfa90fc95c4691d7a36d5a0e4fcf1f55e1af5d290a9f61/playlist.m3u8"),
-        ..Default::default()
-    })?;
+    let details = match season_and_episode_num {
+        Some((season_num, episode_num)) => format!("{} - Season {} Episode {}", title, season_num, episode_num),
+        None => title.to_string(),
+    };    
 
     let re: regex::Regex = Regex::new(PATTERN).unwrap();
 
-    while child.try_wait()?.is_none() {
-        let content = std::fs::read_to_string(&*FILE_PATH)?;
+    let mut output = mpv_child.stdout.take().unwrap();
+    let buffer = vec![0; 256];
+    let mut cursor = Cursor::new(buffer);
+    while mpv_child.try_wait()?.is_none() {
+        cursor.set_position(0);
+        let offset = cursor.position();
+        let bread = output.read(&mut cursor.get_mut()[offset as usize..])?;
+        cursor.set_position(offset + bread as u64);
+        let read_data = &cursor.get_ref()[..cursor.position() as usize];
+
+        let content = String::from_utf8_lossy(&read_data);
+
         let captures = re
-            .captures_iter(content.as_str())
+            .captures_iter(&content)
             .last()
             .ok_or("Could not match the regex pattern.");
 
@@ -65,26 +64,22 @@ pub async fn discord_presence(
             Err(_) => String::from(""),
         };
 
-        let episode_text = format!("Episode {}", episode_number.unwrap_or(0));
         let activity = activity::Activity::new()
             .details(details.as_str())
             .state(position.as_str())
             .assets(
                 activity::Assets::new()
-                    .large_text(&new_title)
-                    .small_image(SMALL_IMAGE)
-                    .small_text(episode_text.as_str()),
+                    .large_image(large_image)
+                    .large_text(&title)
             )
             .buttons(vec![
-                activity::Button::new("Github", "https://github.com/justchokingaround/jerry"),
+                activity::Button::new("Github", "https://github.com/eatmynerds/lobster-rs"),
                 activity::Button::new("Discord", "https://discord.gg/4P2DaJFxbm"),
             ]);
 
         client
             .set_activity(activity)
             .map_err(|_| anyhow!("Failed to set new activity!"))?;
-
-        std::thread::sleep(std::time::Duration::from_secs(1));
     }
 
     client
