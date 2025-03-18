@@ -731,10 +731,6 @@ pub async fn handle_servers(
                 // Move to the last episode of the previous season
                 season_number -= 1;
                 episode_number = episode_info.2[season_number - 1].len();
-            } else {
-                // No previous episode available, staying at the first episode
-                eprintln!("No previous episode available.");
-                std::process::exit(1);
             }
         }
 
