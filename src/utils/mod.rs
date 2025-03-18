@@ -5,6 +5,7 @@ pub mod history;
 pub mod image_preview;
 pub mod players;
 pub mod rofi;
+pub mod presence;
 
 #[derive(thiserror::Error, Debug)]
 pub enum SpawnError {

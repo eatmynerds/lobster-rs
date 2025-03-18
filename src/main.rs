@@ -8,6 +8,7 @@ use regex::Regex;
 use reqwest::Client;
 use self_update::cargo_crate_version;
 use serde::{Deserialize, Serialize};
+use utils::presence::discord_presence;
 use std::{
     fmt::{self, Debug, Display, Formatter},
     num::ParseIntError,
@@ -575,16 +576,23 @@ fn handle_stream(
 
                 let mpv = Mpv::new();
 
-                mpv.play(MpvArgs {
+                let mut child = mpv.play(MpvArgs {
                     url: url.clone(),
                     sub_files: subtitles_for_player.clone(),
                     force_media_title: Some(media_info.2.clone()),
                     watch_later_dir: Some(String::from("/tmp/lobster-rs/watchlater")),
                     write_filename_in_watch_later_config: true,
                     save_position_on_quit: true,
-                    quiet: true,
                     ..Default::default()
                 })?;
+
+                if settings.rpc {
+                    let season_and_episode_num = episode_info.as_ref().map(|(a, b, _)| (*a, *b) );
+
+                    discord_presence(&media_info.2.clone(), season_and_episode_num, child, &media_info.3).await?;
+                } else {
+                    child.wait()?;
+                }
 
                 let process_stdin = if media_info.1.starts_with("tv/") {
                     Some("Next Episode\nPrevious Episode\nReplay\nExit\nSearch".to_string())
@@ -731,7 +739,6 @@ pub async fn handle_servers(
         }
 
         let episode_id = episode_info.2[season_number - 1][episode_number].id.clone();
-        println!("Episode ID: {}", episode_id);
 
         (
             episode_id.clone(),

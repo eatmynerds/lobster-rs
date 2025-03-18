@@ -13,6 +13,7 @@ A [`lobster`](https://github.com/justchokingaround/lobster) rewrite in Rust. Wit
 - [Usage](#usage)
   - [Clear History](#--clear-history-argument)
   - [Download](#-d----download-path-argument)
+  - [Discord Presence](#-r----rpc-argument)
   - [Edit Configuration](#-e----edit-argument)
   - [Image Preview](#-i----image-preview-argument)
   - [JSON Output](#-j----json-argument)
@@ -34,7 +35,6 @@ A [`lobster`](https://github.com/justchokingaround/lobster) rewrite in Rust. Wit
 ## TODO:
 
 #### Features:
-- [ ] Implement `--rpc` / `--discord-presence` / `--presence` argument: Add support for Discord RPC presence.
 - [ ] Implement `-s` / `--syncplay` argument: Enable syncplay functionality.
 
 #### Platform Support:
@@ -221,6 +221,15 @@ or using a relative path:
 
 ```sh
 lobster-rs -d "../rick_and_morty/" "rick and morty"
+```
+
+### `-r` / `--rpc` argument
+
+By passing this argument you make use of discord rich presence so you can let
+your friends know what you are watching.
+
+```sh
+lobster-rs --rpc
 ```
 
 ### `-e` / `--edit` argument
