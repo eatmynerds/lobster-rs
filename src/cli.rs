@@ -449,7 +449,7 @@ pub async fn run(settings: Arc<Args>, config: Arc<Config>) -> anyhow::Result<()>
             handle_servers(
                 config,
                 settings,
-                Some(true),
+                Some(false),
                 (&episode_id, media_id, media_title, media_image),
                 Some((season_number, episode_number, tv.seasons.episodes)),
             )

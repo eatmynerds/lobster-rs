@@ -8,7 +8,6 @@ use regex::Regex;
 use reqwest::Client;
 use self_update::cargo_crate_version;
 use serde::{Deserialize, Serialize};
-use utils::presence::discord_presence;
 use std::{
     fmt::{self, Debug, Display, Formatter},
     num::ParseIntError,
@@ -18,6 +17,7 @@ use std::{
 };
 use utils::history::{save_history, save_progress};
 use utils::image_preview::remove_desktop_and_tmp;
+use utils::presence::discord_presence;
 
 mod cli;
 use cli::{run, subtitles_prompt};
@@ -587,9 +587,15 @@ fn handle_stream(
                 })?;
 
                 if settings.rpc {
-                    let season_and_episode_num = episode_info.as_ref().map(|(a, b, _)| (*a, *b) );
+                    let season_and_episode_num = episode_info.as_ref().map(|(a, b, _)| (*a, *b));
 
-                    discord_presence(&media_info.2.clone(), season_and_episode_num, child, &media_info.3).await?;
+                    discord_presence(
+                        &media_info.2.clone(),
+                        season_and_episode_num,
+                        child,
+                        &media_info.3,
+                    )
+                    .await?;
                 } else {
                     child.wait()?;
                 }
@@ -731,10 +737,6 @@ pub async fn handle_servers(
                 // Move to the last episode of the previous season
                 season_number -= 1;
                 episode_number = episode_info.2[season_number - 1].len();
-            } else {
-                // No previous episode available, staying at the first episode
-                eprintln!("No previous episode available.");
-                std::process::exit(1);
             }
         }
 
