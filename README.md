@@ -22,6 +22,7 @@ A [`lobster`](https://github.com/justchokingaround/lobster) rewrite in Rust. Wit
   - [Provider Selection](#-p----provider-provider-argument)
   - [Quality Selection](#-q----quality-quality-argument)
   - [Recent Content](#--recent-tvmovie-argument)
+  - [Syncplay](#-s----syncplay-argument)
   - [Trending Content](#-t----trending-tvmovie-argument)
   - [Continue Watching](#-c----continue-argument)
   - [Update](#-u----update-argument)
@@ -34,12 +35,8 @@ A [`lobster`](https://github.com/justchokingaround/lobster) rewrite in Rust. Wit
 
 ## TODO:
 
-#### Features:
-- [ ] Implement `-s` / `--syncplay` argument: Enable syncplay functionality.
-
 #### Platform Support:
 - [ ] Add Android support.
-- [ ] Add support for IINA (macOS media player).
 - [ ] Add support for Termux (Linux-based terminal emulator for Android).
 
 ## Installation
@@ -342,6 +339,16 @@ Example use case:
 
 ```sh
 lobster-rs --recent tv
+```
+
+### `-s` / `--syncplay` argument
+
+By passing this argument, you can use [syncplay](https://syncplay.pl/) to watch
+videos with your friends. This will only work if you have syncplay installed and
+configured.
+
+```sh
+lobster-rs --syncplay
 ```
 
 ### `-t` / `--trending` `<tv|movie>` argument
