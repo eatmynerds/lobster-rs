@@ -414,27 +414,36 @@ fn update() -> anyhow::Result<()> {
 async fn url_quality(url: String, quality: Option<Quality>) -> anyhow::Result<String> {
     let input = CLIENT.get(url).send().await?.text().await?;
 
-    let url_re = Regex::new(r"https://(.+?)m3u8").unwrap();
+    let url_re = Regex::new(r"https://[^\s]+m3u8").unwrap();
     let res_re = Regex::new(r"RESOLUTION=(\d+)x(\d+)").unwrap();
 
+    let mut resolutions = Vec::new();
+    for cap in res_re.captures_iter(&input) {
+        resolutions.push(cap[2].to_string()); // Collect only height (e.g., "1080", "720", "360")
+    }
+
     let url = if let Some(chosen_quality) = quality {
-        let url: String = url_re
+        url_re
             .captures_iter(&input)
             .zip(res_re.captures_iter(&input))
             .find_map(|(url_captures, res_captures)| {
                 let resolution = &res_captures[2];
                 let url = &url_captures[0];
 
-                if resolution.to_string() == chosen_quality.to_string() {
+                if resolution == chosen_quality.to_string() {
                     Some(url.to_string())
                 } else {
-                    info!("Quality {} not found, falling back to auto", chosen_quality);
-                    Some(url.to_string())
+                    None
                 }
             })
-            .expect(&format!("Unable to find url!"));
-
-        url
+            .unwrap_or_else(|| {
+                info!("Quality {} not found, falling back to auto", chosen_quality);
+                input
+                    .lines()
+                    .find(|line| line.starts_with("https://"))
+                    .unwrap_or("")
+                    .to_string()
+            })
     } else {
         let mut urls_and_resolutions: Vec<(u32, String)> = url_re
             .captures_iter(&input)
