@@ -62,13 +62,13 @@ echo 'lobster-rs installed successfully! :) \nRun `lobster-rs --help` to get sta
 
 #### Nixos (Flake)
 
-Add this to you flake.nix
+Add this to your flake.nix
 
 ```nix
 inputs.lobster.url = "github:eatmynerds/lobster-rs";
 ```
 
-Add this to you configuration.nix
+Add this to your configuration.nix
 
 ```nix
 environment.systemPackages = [
@@ -76,7 +76,7 @@ environment.systemPackages = [
 ];
 ```
 
-##### Or for run the script once use
+##### Or to run the script once use
 
 ```sh
 nix run github:eatmynerds/lobster-rs
