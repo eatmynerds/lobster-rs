@@ -18,6 +18,7 @@ use std::{
 use utils::history::{save_history, save_progress};
 use utils::image_preview::remove_desktop_and_tmp;
 use utils::presence::discord_presence;
+use utils::SpawnError;
 
 mod cli;
 use cli::{run, subtitles_prompt};
@@ -33,6 +34,7 @@ use utils::{
     players::{
         mpv::{Mpv, MpvArgs, MpvPlay},
         vlc::{Vlc, VlcArgs, VlcPlay},
+        iina::{Iina, IinaArgs, IinaPlay},
     },
     rofi::{Rofi, RofiArgs, RofiSpawn},
 };
@@ -63,6 +65,8 @@ impl Display for MediaType {
 pub enum Player {
     Vlc,
     Mpv,
+    Iina,
+    SyncPlay,
 }
 
 #[derive(ValueEnum, Clone, Debug, Serialize, Deserialize, Copy, PartialEq)]
@@ -314,7 +318,7 @@ async fn launcher(
                     fzf_args.preview = Some(
                         r#"
                 selected=$(echo {} | cut -f2 | sed 's/\//-/g')
-                chafa -f sixel -s 80x40 "/tmp/images/${selected}.jpg"
+                chafa -f sixels -s 80x40 "/tmp/images/${selected}.jpg"
                     "#
                         .to_string(),
                     );
@@ -467,6 +471,101 @@ async fn url_quality(url: String, quality: Option<Quality>) -> anyhow::Result<St
     Ok(url)
 }
 
+async fn player_run_choice(
+    media_info: (String, String, String, String),
+    episode_info: Option<(usize, usize, Vec<Vec<FlixHQEpisode>>)>,
+    config: Arc<Config>,
+    settings: Arc<Args>,
+    player: Player,
+    download_dir: Option<String>,
+    player_url: String,
+    subtitles: Vec<String>,
+    subtitle_language: Option<Languages>,
+) -> anyhow::Result<()> {
+    let process_stdin = if media_info.1.starts_with("tv/") {
+        Some("Next Episode\nPrevious Episode\nReplay\nExit\nSearch".to_string())
+    } else {
+        Some("Replay\nExit\nSearch".to_string())
+    };
+
+    let run_choice = launcher(
+        &vec![],
+        settings.rofi,
+        &mut RofiArgs {
+            mesg: Some("Select: ".to_string()),
+            process_stdin: process_stdin.clone(),
+            dmenu: true,
+            case_sensitive: true,
+            ..Default::default()
+        },
+        &mut FzfArgs {
+            prompt: Some("Select: ".to_string()),
+            process_stdin,
+            reverse: true,
+            ..Default::default()
+        },
+    )
+    .await;
+
+    match run_choice.as_str() {
+        "Next Episode" => {
+            handle_servers(
+                config.clone(),
+                settings.clone(),
+                Some(true),
+                (
+                    media_info.0.as_str(),
+                    media_info.1.as_str(),
+                    media_info.2.as_str(),
+                    media_info.3.as_str(),
+                ),
+                episode_info,
+            )
+            .await?;
+        }
+        "Previous Episode" => {
+            handle_servers(
+                config.clone(),
+                settings.clone(),
+                Some(false),
+                (
+                    media_info.0.as_str(),
+                    media_info.1.as_str(),
+                    media_info.2.as_str(),
+                    media_info.3.as_str(),
+                ),
+                episode_info,
+            )
+            .await?;
+        }
+        "Search" => {
+            run(Arc::new(Args::default()), Arc::clone(&config)).await?;
+        }
+        "Replay" => {
+            handle_stream(
+                settings.clone(),
+                config.clone(),
+                player,
+                download_dir,
+                player_url,
+                media_info,
+                episode_info,
+                subtitles,
+                subtitle_language,
+            )
+            .await?;
+        }
+        "Exit" => {
+            std::process::exit(0);
+        }
+        _ => {
+            unreachable!("You shouldn't be here...")
+        }
+    }
+
+    Ok(())
+}
+
 fn handle_stream(
     settings: Arc<Args>,
     config: Arc<Config>,
@@ -501,6 +600,18 @@ fn handle_stream(
 
     async move {
         match player {
+            Player::Iina => {
+                let iina = Iina::new();
+
+                iina.play(IinaArgs {
+                    url,
+                    no_stdin: true,
+                    keep_running: true,
+                    mpv_sub_files: subtitles_for_player,
+                    mpv_force_media_title: Some(media_info.2.clone()),
+                    ..Default::default()
+                })?;
+            }
             Player::Vlc => {
                 if let Some(download_dir) = download_dir {
                     download(
@@ -523,39 +634,22 @@ fn handle_stream(
                 vlc.play(VlcArgs {
                     url,
                     input_slave: subtitles_for_player,
-                    meta_title: Some(media_info.2),
+                    meta_title: Some(media_info.2.clone()),
                     ..Default::default()
                 })?;
 
-                let run_choice = launcher(
-                    &vec![],
-                    settings.rofi,
-                    &mut RofiArgs {
-                        mesg: Some("Select: ".to_string()),
-                        process_stdin: Some("Exit\nSearch".to_string()),
-                        dmenu: true,
-                        case_sensitive: true,
-                        ..Default::default()
-                    },
-                    &mut FzfArgs {
-                        prompt: Some("Select: ".to_string()),
-                        process_stdin: Some("Exit\nSearch".to_string()),
-                        reverse: true,
-                        ..Default::default()
-                    },
+                player_run_choice(
+                    media_info,
+                    episode_info,
+                    config,
+                    settings,
+                    player,
+                    download_dir,
+                    player_url,
+                    subtitles,
+                    subtitle_language,
                 )
-                .await;
-
-                match run_choice.as_str() {
-                    "Search" => {
-                        run(Arc::new(Args::default()), Arc::clone(&config)).await?;
-                    }
-                    "Exit" => {
-                        info!("Exiting...");
-                        std::process::exit(0);
-                    }
-                    _ => {}
-                }
+                .await?;
             }
             Player::Mpv => {
                 if let Some(download_dir) = download_dir {
@@ -596,6 +690,13 @@ fn handle_stream(
                     ..Default::default()
                 })?;
 
+                if config.history {
+                    let (position, progress) = save_progress(url).await?;
+
+                    save_history(media_info.clone(), episode_info.clone(), position, progress)
+                        .await?;
+                }
+
                 if settings.rpc {
                     let season_and_episode_num = episode_info.as_ref().map(|(a, b, _)| (*a, *b));
 
@@ -610,93 +711,34 @@ fn handle_stream(
                     child.wait()?;
                 }
 
-                let process_stdin = if media_info.1.starts_with("tv/") {
-                    Some("Next Episode\nPrevious Episode\nReplay\nExit\nSearch".to_string())
-                } else {
-                    Some("Replay\nExit\nSearch".to_string())
-                };
-
-                if config.history {
-                    let (position, progress) = save_progress(url).await?;
-
-                    save_history(media_info.clone(), episode_info.clone(), position, progress)
-                        .await?;
-                }
-
-                let run_choice = launcher(
-                    &vec![],
-                    settings.rofi,
-                    &mut RofiArgs {
-                        mesg: Some("Select: ".to_string()),
-                        process_stdin: process_stdin.clone(),
-                        dmenu: true,
-                        case_sensitive: true,
-                        ..Default::default()
-                    },
-                    &mut FzfArgs {
-                        prompt: Some("Select: ".to_string()),
-                        process_stdin,
-                        reverse: true,
-                        ..Default::default()
-                    },
+                player_run_choice(
+                    media_info,
+                    episode_info,
+                    config,
+                    settings,
+                    player,
+                    download_dir,
+                    player_url,
+                    subtitles,
+                    subtitle_language,
                 )
-                .await;
+                .await?;
+            }
+            Player::SyncPlay => {
+                let url = url_quality(url, settings.quality).await?;
 
-                match run_choice.as_str() {
-                    "Next Episode" => {
-                        handle_servers(
-                            config.clone(),
-                            settings.clone(),
-                            Some(true),
-                            (
-                                media_info.0.as_str(),
-                                media_info.1.as_str(),
-                                media_info.2.as_str(),
-                                media_info.3.as_str(),
-                            ),
-                            episode_info,
-                        )
-                        .await?;
-                    }
-                    "Previous Episode" => {
-                        handle_servers(
-                            config.clone(),
-                            settings.clone(),
-                            Some(false),
-                            (
-                                media_info.0.as_str(),
-                                media_info.1.as_str(),
-                                media_info.2.as_str(),
-                                media_info.3.as_str(),
-                            ),
-                            episode_info,
-                        )
-                        .await?;
-                    }
-                    "Search" => {
-                        run(Arc::new(Args::default()), Arc::clone(&config)).await?;
-                    }
-                    "Replay" => {
-                        handle_stream(
-                            settings.clone(),
-                            config.clone(),
-                            player,
-                            download_dir,
-                            player_url,
-                            media_info,
-                            episode_info,
-                            subtitles,
-                            subtitle_language,
-                        )
-                        .await?;
-                    }
-                    "Exit" => {
-                        std::process::exit(0);
-                    }
-                    _ => {
-                        unreachable!("You shouldn't be here...")
-                    }
-                }
+                Command::new("nohup")
+                    .args([
+                        r#""syncplay""#,
+                        &url,
+                        "--",
+                        &format!("--force-media-title={}", media_info.2),
+                    ])
+                    .spawn()
+                    .map_err(|e| {
+                        error!("Failed to start Syncplay: {}", e);
+                        SpawnError::IOError(e)
+                    })?;
             }
         }
 
@@ -829,14 +871,19 @@ pub async fn handle_servers(
 
             debug!("Selected subtitles: {:?}", selected_subtitles);
 
-            let player = match config.player.to_lowercase().as_str() {
+            let mut player = match config.player.to_lowercase().as_str() {
                 "vlc" => Player::Vlc,
                 "mpv" => Player::Mpv,
+                "syncplay" => Player::SyncPlay,
                 _ => {
                     error!("Player not supported");
                     std::process::exit(1);
                 }
             };
+
+            if settings.syncplay {
+                player = Player::SyncPlay;
+            }
 
             debug!("Starting stream with player: {:?}", player);
 

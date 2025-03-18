@@ -77,6 +77,8 @@ pub async fn discord_presence(
                 activity::Button::new("Discord", "https://discord.gg/4P2DaJFxbm"),
             ]);
 
+        std::thread::sleep(std::time::Duration::from_secs(2));
+
         client
             .set_activity(activity)
             .map_err(|_| anyhow!("Failed to set new activity!"))?;
