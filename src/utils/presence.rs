@@ -28,7 +28,7 @@ pub async fn discord_presence(
         .map_err(|_| anyhow!("Failed to connect to discord client!"))?;
 
     let details = match season_and_episode_num {
-        Some((season_num, episode_num)) => format!("{} - Season {} Episode {}", title, season_num, episode_num),
+        Some((season_num, episode_num)) => format!("{} - Season {} Episode {}", title, season_num, episode_num + 1),
         None => title.to_string(),
     };    
 
