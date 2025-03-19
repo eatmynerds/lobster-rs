@@ -58,7 +58,7 @@ jobs:
         uses: actions/checkout@v3
 
       - name: 🛠️ Install cross-compilation dependencies (Linux)
-        if: runner.os == 'Linux' 
+        if: runner.os == 'Linux' && !matrix.is_android
         run: |
           sudo apt-get update
           sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu qemu-user
@@ -81,16 +81,6 @@ jobs:
         run: |
           env CROSS_CONTAINER_IN_CONTAINER=true
           cargo install cross
-
-      - name: 🏗️ Build
-        uses: actions-rs/cargo@v1
-        if: "matrix.target != 'aarch64-linux-android' && matrix.target != 'x86_64-linux-android' && matrix.target != 'aarch64-unknown-linux-gnu'"
-        with:
-          command: build
-          args: --release --target ${{ matrix.target }}
-        env:
-          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
-
 
       # Android NDK installation and OpenSSL configuration
       - name: 📱 Install Android NDK and configure OpenSSL
@@ -127,21 +117,29 @@ jobs:
           
           cd ..
 
-      # Standard build for most targets
-      - name: 🏗️ Build (Standard)
-        if: "!matrix.is_android && matrix.target != 'aarch64-unknown-linux-gnu'"
+      # Standard build for non-Android x86_64 Linux
+      - name: 🏗️ Build (Linux x86_64)
+        if: matrix.target == 'x86_64-unknown-linux-gnu'
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --release --target ${{ matrix.target }}
+
+      # Cross build for ARM Linux
+      - name: 🏗️ Build (Ubuntu ARM)
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: |
+          cross build --release --target ${{ matrix.target }}
+
+      # Standard build for Windows and macOS
+      - name: 🏗️ Build (Windows/macOS)
+        if: "runner.os == 'Windows' || runner.os == 'macOS'"
         uses: actions-rs/cargo@v1
         with:
           command: build
           args: --release --target ${{ matrix.target }}
         env:
           CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
-
-      # Special build for ARM Linux
-      - name: 🏗️ Build (Ubuntu ARM)
-        if: matrix.target == 'aarch64-unknown-linux-gnu'
-        run: |
-          cross build --release --target ${{ matrix.target }}
 
       # Android build with fallback options
       - name: 📱 Build for Android
