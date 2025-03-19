@@ -9,186 +9,188 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  check-version:
+  build-linux:
+    name: Build Linux (${{ matrix.arch }})
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-        with:
-          fetch-depth: 2
-
-  build:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
         arch: [x86_64, aarch64]
         include:
-          - os: ubuntu-latest
-            arch: x86_64
+          - arch: x86_64
             target: x86_64-unknown-linux-gnu
-          - os: ubuntu-latest
-            arch: aarch64
+          - arch: aarch64
             target: aarch64-unknown-linux-gnu
-          - os: macos-latest
-            arch: x86_64
-            target: x86_64-apple-darwin
-          - os: macos-latest
-            arch: aarch64
-            target: aarch64-apple-darwin
-          - os: windows-latest
-            arch: x86_64
-            target: x86_64-pc-windows-msvc
-          - os: windows-latest
-            arch: aarch64
-            target: aarch64-pc-windows-msvc
-          # Android targets
-          - os: ubuntu-latest
-            arch: aarch64
-            target: aarch64-linux-android
-            is_android: true
-          - os: ubuntu-latest
-            arch: x86_64
-            target: x86_64-linux-android
-            is_android: true
-        exclude:
-          # Exclude Android targets from regular builds
-          - os: ubuntu-latest
-            arch: aarch64
-            target: aarch64-unknown-linux-gnu
-            is_android: true
-          - os: ubuntu-latest
-            arch: x86_64
-            target: x86_64-unknown-linux-gnu
-            is_android: true
-
-    runs-on: ${{ matrix.os }}
-
+    
     steps:
-      - name: 📥 Clone repository
+      - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: 🛠️ Install cross-compilation dependencies (Linux)
-        if: runner.os == 'Linux' && matrix.target == 'x86_64-unknown-linux-gnu'
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: nightly
+          target: ${{ matrix.target }}
+          override: true
+          profile: minimal
+
+      - name: Install dependencies for x86_64
+        if: matrix.arch == 'x86_64'
         run: |
           sudo apt-get update
-          sudo apt-get install -y gcc qemu-user
+          sudo apt-get install -y build-essential
 
-      - name: 🛠️ Install cross-compilation dependencies (Linux ARM)
-        if: runner.os == 'Linux' && matrix.target == 'aarch64-unknown-linux-gnu'
+      - name: Install dependencies for aarch64
+        if: matrix.arch == 'aarch64'
         run: |
           sudo apt-get update
           sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu qemu-user
+          cargo install cross
 
-      - name: 🛠️ Install cross-compilation dependencies (macOS🍎)
-        if: runner.os == 'macOS'
-        run: |
-          brew install FiloSottile/musl-cross/musl-cross
+      - name: Build x86_64 target
+        if: matrix.arch == 'x86_64'
+        run: cargo build --release --target ${{ matrix.target }}
 
-      - name: 🔧 Install Rust
+      - name: Build aarch64 target
+        if: matrix.arch == 'aarch64'
+        run: cross build --release --target ${{ matrix.target }}
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}
+          path: target/${{ matrix.target }}/release/lobster-rs*
+
+  build-macos:
+    name: Build macOS (${{ matrix.arch }})
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x86_64, aarch64]
+        include:
+          - arch: x86_64
+            target: x86_64-apple-darwin
+          - arch: aarch64
+            target: aarch64-apple-darwin
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: nightly
+          target: ${{ matrix.target }}
+          override: true
+          profile: minimal
+
+      - name: Build
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}
+          path: target/${{ matrix.target }}/release/lobster-rs*
+
+  build-windows:
+    name: Build Windows (${{ matrix.arch }})
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x86_64, aarch64]
+        include:
+          - arch: x86_64
+            target: x86_64-pc-windows-msvc
+          - arch: aarch64
+            target: aarch64-pc-windows-msvc
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: nightly
+          target: ${{ matrix.target }}
+          override: true
+          profile: minimal
+
+      - name: Build
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}
+          path: target/${{ matrix.target }}/release/lobster-rs*
+
+  build-android:
+    name: Build Android (${{ matrix.arch }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x86_64, aarch64]
+        include:
+          - arch: x86_64
+            target: x86_64-linux-android
+          - arch: aarch64
+            target: aarch64-linux-android
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Install Rust
         uses: actions-rs/toolchain@v1
         with:
           toolchain: nightly
           override: true
-          target: ${{ matrix.target }}
           profile: minimal
 
-      - name: 🛠️ Install cross for Ubuntu ARM
-        if: matrix.target == 'aarch64-unknown-linux-gnu'
+      - name: Install Android NDK and cargo-ndk
         run: |
-          cargo install cross
-
-      # Android NDK installation and OpenSSL configuration
-      - name: 📱 Install Android NDK and configure OpenSSL
-        if: matrix.is_android == true
-        run: |
+          sudo apt-get update
           sudo apt-get install -y unzip wget libssl-dev
           wget -q https://dl.google.com/android/repository/android-ndk-r25b-linux.zip
           unzip -q android-ndk-r25b-linux.zip
           echo "ANDROID_NDK_HOME=$PWD/android-ndk-r25b" >> $GITHUB_ENV
           echo "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin" >> $GITHUB_PATH
           cargo install cargo-ndk
-          
-          # Install OpenSSL for Android
-          git clone https://github.com/openssl/openssl.git -b OpenSSL_1_1_1-stable openssl-src
-          cd openssl-src
-          
-          # Configure and build OpenSSL for Android
-          export ANDROID_NDK_HOME=$PWD/../android-ndk-r25b
-          export PATH=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH
-          
-          if [[ "${{ matrix.arch }}" == "aarch64" ]]; then
-            # Configure for ARM64
-            ./Configure android-arm64 -D__ANDROID_API__=21 --prefix=$PWD/../openssl-android-arm64
-            make -j4
-            make install_sw
-            echo "OPENSSL_DIR=$PWD/../openssl-android-arm64" >> $GITHUB_ENV
-          else
-            # Configure for x86_64
-            ./Configure android-x86_64 -D__ANDROID_API__=21 --prefix=$PWD/../openssl-android-x86_64
-            make -j4
-            make install_sw
-            echo "OPENSSL_DIR=$PWD/../openssl-android-x86_64" >> $GITHUB_ENV
-          fi
-          
-          cd ..
 
-      # Standard build for non-Android x86_64 Linux
-      - name: 🏗️ Build (Linux x86_64)
-        if: matrix.target == 'x86_64-unknown-linux-gnu' && matrix.is_android != true
+      - name: Build for Android
         run: |
-          cargo build --release --target ${{ matrix.target }}
-
-      # Cross build for ARM Linux
-      - name: 🏗️ Build (Ubuntu ARM)
-        if: matrix.target == 'aarch64-unknown-linux-gnu' && matrix.is_android != true
-        run: |
-          cross build --release --target ${{ matrix.target }}
-
-      # Standard build for Windows and macOS
-      - name: 🏗️ Build (Windows/macOS)
-        if: runner.os == 'Windows' || runner.os == 'macOS'
-        run: |
-          cargo build --release --target ${{ matrix.target }}
-        env:
-          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
-
-      # Android build with fallback options
-      - name: 📱 Build for Android
-        if: matrix.is_android == true
-        run: |
-          # Try building with OpenSSL configuration
           cargo ndk -t ${{ matrix.arch }}-linux-android build --release || \
-          # If that fails, try building with no-default-features to avoid OpenSSL
           cargo ndk -t ${{ matrix.arch }}-linux-android build --release --no-default-features || \
-          # Last resort: Try building with specific OPENSSL_STATIC flag
           OPENSSL_STATIC=1 cargo ndk -t ${{ matrix.arch }}-linux-android build --release --no-default-features
 
-      # Debug info for troubleshooting
-      - name: Debug target information
-        run: |
-          echo "OS: ${{ runner.os }}"
-          echo "Target: ${{ matrix.target }}"
-          echo "Is Android: ${{ matrix.is_android }}"
-          echo "Architecture: ${{ matrix.arch }}"
-
-      - name: Upload artifacts
+      - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.target }}
           path: target/${{ matrix.target }}/release/lobster-rs*
 
   release:
+    name: Create Release
     runs-on: ubuntu-latest
-    needs: build
+    needs: [build-linux, build-macos, build-windows, build-android]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+    
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v3
 
       - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
           path: release
 
-      - name: Create GitHub release ✈️
+      - name: Create GitHub release
         id: create_release
         uses: actions/create-release@v1
         env:
@@ -201,14 +203,14 @@ jobs:
           draft: false
           prerelease: false
 
-      - name: Zip all binaries 📥
+      - name: Zip all binaries
         run: |
           find release -type f ! -name "*.d" -exec sh -c 'cp "$1" "$(dirname "$1" | xargs basename)_$(basename "$1")"' _ {} \;
           chmod +x *apple-darwin*
           chmod +x *linux-gnu*
           zip -r lobster-rs.zip *lobster-rs*
 
-      - name: Upload zip to release 📤
+      - name: Upload zip to release
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
