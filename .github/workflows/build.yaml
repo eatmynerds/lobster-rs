@@ -62,11 +62,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu qemu-user
-
-      - name: 🛠️ Install cross-compilation dependencies (macOS🍎)
-        if: runner.os == 'macOS'
-        run: |
-          brew install FiloSottile/musl-cross/musl-cross
+          cargo install cross --git https://github.com/rust-embedded/cross
 
       - name: 🔧 Install Rust
         uses: actions-rs/toolchain@v1
@@ -76,13 +72,7 @@ jobs:
           target: ${{ matrix.target }}
           profile: minimal
 
-      - name: 🛠️ Install cross-compilation dependencies (Ubuntu ARM)
-        if: matrix.target == 'aarch64-unknown-linux-gnu'
-        run: |
-          env CROSS_CONTAINER_IN_CONTAINER=true
-          cargo install cross
-
-      # Android NDK installation and OpenSSL configuration
+      # Android setup
       - name: 📱 Install Android NDK and configure OpenSSL
         if: matrix.is_android
         run: |
@@ -92,57 +82,23 @@ jobs:
           echo "ANDROID_NDK_HOME=$PWD/android-ndk-r25b" >> $GITHUB_ENV
           echo "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin" >> $GITHUB_PATH
           cargo install cargo-ndk
-          
-          # Install OpenSSL for Android
-          git clone https://github.com/openssl/openssl.git -b OpenSSL_1_1_1-stable openssl-src
-          cd openssl-src
-          
-          # Configure and build OpenSSL for Android
-          export ANDROID_NDK_HOME=$PWD/../android-ndk-r25b
-          export PATH=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH
-          
-          if [[ "${{ matrix.arch }}" == "aarch64" ]]; then
-            # Configure for ARM64
-            ./Configure android-arm64 -D__ANDROID_API__=21 --prefix=$PWD/../openssl-android-arm64
-            make -j4
-            make install_sw
-            echo "OPENSSL_DIR=$PWD/../openssl-android-arm64" >> $GITHUB_ENV
-          else
-            # Configure for x86_64
-            ./Configure android-x86_64 -D__ANDROID_API__=21 --prefix=$PWD/../openssl-android-x86_64
-            make -j4
-            make install_sw
-            echo "OPENSSL_DIR=$PWD/../openssl-android-x86_64" >> $GITHUB_ENV
-          fi
-          
-          cd ..
-
-      # Standard build for most targets
+      
       - name: 🏗️ Build (Standard)
         if: "!matrix.is_android && matrix.target != 'aarch64-unknown-linux-gnu'"
         uses: actions-rs/cargo@v1
         with:
           command: build
           args: --release --target ${{ matrix.target }}
-        env:
-          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
 
-      # Special build for ARM Linux
       - name: 🏗️ Build (Ubuntu ARM)
-        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        if: matrix.target == 'aarch64-unknown-linux-gnu' && !matrix.is_android
         run: |
           cross build --release --target ${{ matrix.target }}
 
-      # Android build with fallback options
       - name: 📱 Build for Android
         if: matrix.is_android
         run: |
-          # Try building with OpenSSL configuration
-          cargo ndk -t ${{ matrix.arch }}-linux-android build --release || \
-          # If that fails, try building with no-default-features to avoid OpenSSL
-          cargo ndk -t ${{ matrix.arch }}-linux-android build --release --no-default-features || \
-          # Last resort: Try building with specific OPENSSL_STATIC flag
-          OPENSSL_STATIC=1 cargo ndk -t ${{ matrix.arch }}-linux-android build --release --no-default-features
+          cargo ndk -t ${{ matrix.arch }}-linux-android build --release
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -177,9 +133,7 @@ jobs:
       - name: Zip all binaries 📥
         run: |
           find release -type f ! -name "*.d" -exec sh -c 'cp "$1" "$(dirname "$1" | xargs basename)_$(basename "$1")"' _ {} \;
-          chmod +x *apple-darwin*
-          chmod +x *linux-gnu*
-          zip -r lobster-rs.zip *lobster-rs*
+          ls -a
 
       - name: Upload zip to release 📤
         uses: actions/upload-release-asset@v1
