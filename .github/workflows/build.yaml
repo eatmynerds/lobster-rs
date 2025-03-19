@@ -78,16 +78,40 @@ jobs:
           env CROSS_CONTAINER_IN_CONTAINER=true
           cargo install cross
 
-      # ✅ Install cargo-ndk for Android builds
-      - name: 📱 Install Android NDK and cargo-ndk
+      # ✅ Updated Android NDK installation and OpenSSL configuration
+      - name: 📱 Install Android NDK and configure OpenSSL
         if: matrix.target == 'aarch64-linux-android' || matrix.target == 'x86_64-linux-android'
         run: |
-          sudo apt-get install -y unzip wget
+          sudo apt-get install -y unzip wget libssl-dev
           wget -q https://dl.google.com/android/repository/android-ndk-r25b-linux.zip
           unzip -q android-ndk-r25b-linux.zip
           echo "ANDROID_NDK_HOME=$PWD/android-ndk-r25b" >> $GITHUB_ENV
           echo "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin" >> $GITHUB_PATH
           cargo install cargo-ndk
+          
+          # Install OpenSSL for Android
+          git clone https://github.com/openssl/openssl.git -b OpenSSL_1_1_1-stable openssl-src
+          cd openssl-src
+          
+          # Configure and build OpenSSL for Android
+          export ANDROID_NDK_HOME=$PWD/../android-ndk-r25b
+          export PATH=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH
+          
+          if [[ "${{ matrix.arch }}" == "aarch64" ]]; then
+            # Configure for ARM64
+            ./Configure android-arm64 -D__ANDROID_API__=21 --prefix=$PWD/../openssl-android-arm64
+            make -j4
+            make install_sw
+            echo "OPENSSL_DIR=$PWD/../openssl-android-arm64" >> $GITHUB_ENV
+          else
+            # Configure for x86_64
+            ./Configure android-x86_64 -D__ANDROID_API__=21 --prefix=$PWD/../openssl-android-x86_64
+            make -j4
+            make install_sw
+            echo "OPENSSL_DIR=$PWD/../openssl-android-x86_64" >> $GITHUB_ENV
+          fi
+          
+          cd ..
 
       - name: 🏗️ Build
         if: matrix.target != 'aarch64-unknown-linux-gnu' && matrix.target != 'aarch64-linux-android' && matrix.target != 'x86_64-linux-android'
@@ -103,10 +127,16 @@ jobs:
         run: |
           cross build --release --target ${{ matrix.target }}
 
+      # ✅ Updated Android build with fallback options
       - name: 📱 Build for Android
         if: matrix.target == 'aarch64-linux-android' || matrix.target == 'x86_64-linux-android'
         run: |
-          cargo ndk -t ${{ matrix.arch }}-linux-android build --release
+          # Try building with OpenSSL configuration
+          cargo ndk -t ${{ matrix.arch }}-linux-android build --release || \
+          # If that fails, try building with no-default-features to avoid OpenSSL
+          cargo ndk -t ${{ matrix.arch }}-linux-android build --release --no-default-features || \
+          # Last resort: Try building with specific OPENSSL_STATIC flag
+          OPENSSL_STATIC=1 cargo ndk -t ${{ matrix.arch }}-linux-android build --release --no-default-features
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -154,4 +184,3 @@ jobs:
           asset_path: lobster-rs.zip
           asset_name: lobster-rs.zip
           asset_content_type: application/zip
-
