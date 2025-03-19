@@ -740,6 +740,10 @@ fn handle_stream(
                 )
                 .await?;
             }
+            Player::MpvAndroid => {
+                println!("Playing videos on Android is not supported yet.");
+                std::process::exit(1);
+            }
             Player::SyncPlay => {
                 let url = url_quality(url, settings.quality).await?;
 
