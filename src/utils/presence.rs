@@ -2,7 +2,10 @@ use anyhow::anyhow;
 use discord_rich_presence::{activity, DiscordIpc, DiscordIpcClient};
 use lazy_static::lazy_static;
 use regex::Regex;
-use std::{io::{Cursor, Read}, process::Child};
+use std::{
+    io::{Cursor, Read},
+    process::Child,
+};
 
 lazy_static! {
     static ref FILE_PATH: String = if cfg!(windows) {
@@ -20,17 +23,22 @@ pub async fn discord_presence(
     mut mpv_child: Child,
     large_image: &str,
 ) -> anyhow::Result<()> {
-    let mut client =
-        DiscordIpcClient::new("1340948447305535592").map_err(|_| anyhow!("Failed to create discord IPC client!"))?;
+    let mut client = DiscordIpcClient::new("1340948447305535592")
+        .map_err(|_| anyhow!("Failed to create discord IPC client!"))?;
 
     client
         .connect()
         .map_err(|_| anyhow!("Failed to connect to discord client!"))?;
 
     let details = match season_and_episode_num {
-        Some((season_num, episode_num)) => format!("{} - Season {} Episode {}", title, season_num, episode_num + 1),
+        Some((season_num, episode_num)) => format!(
+            "{} - Season {} Episode {}",
+            title,
+            season_num,
+            episode_num + 1
+        ),
         None => title.to_string(),
-    };    
+    };
 
     let re: regex::Regex = Regex::new(PATTERN).unwrap();
 
@@ -70,7 +78,7 @@ pub async fn discord_presence(
             .assets(
                 activity::Assets::new()
                     .large_image(large_image)
-                    .large_text(&title)
+                    .large_text(&title),
             )
             .buttons(vec![
                 activity::Button::new("Github", "https://github.com/eatmynerds/lobster-rs"),
