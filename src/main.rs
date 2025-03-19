@@ -783,8 +783,26 @@ fn handle_stream(
                     return Ok(());
                 }
 
-                println!("Playing videos on Android is not supported yet.");
-                std::process::exit(1);
+                Command::new("am")
+                    .args([
+                        "start",
+                        "--user",
+                        "0",
+                        "-a",
+                        "android.intent.action.VIEW",
+                        "-d",
+                        &url,
+                        "-n",
+                        "is.xyz.mpv/.MPVActivity",
+                        "-e",
+                        "title",
+                        &media_info.2,
+                    ])
+                    .spawn()
+                    .map_err(|e| {
+                        error!("Failed to start MPV for Android: {}", e);
+                        SpawnError::IOError(e)
+                    })?;
             }
             Player::SyncPlay => {
                 let url = url_quality(url, settings.quality).await?;
