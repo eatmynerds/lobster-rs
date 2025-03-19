@@ -23,12 +23,14 @@ pub async fn discord_presence(
     mut mpv_child: Child,
     large_image: &str,
 ) -> anyhow::Result<()> {
-    let mut client = DiscordIpcClient::new("1340948447305535592")
+    let client_id = "1340948447305535592";
+    let mut client = DiscordIpcClient::new(client_id)
         .map_err(|_| anyhow!("Failed to create discord IPC client!"))?;
 
-    client
-        .connect()
-        .map_err(|_| anyhow!("Failed to connect to discord client!"))?;
+    match client.connect() {
+        Ok(_) => println!("Client connected to Discord successfully."),
+        Err(_) => println!("Client failed to connect to Discord, will retry automatically."),
+    };
 
     let details = match season_and_episode_num {
         Some((season_num, episode_num)) => format!(
@@ -41,24 +43,24 @@ pub async fn discord_presence(
     };
 
     let re: regex::Regex = Regex::new(PATTERN).unwrap();
-
     let mut output = mpv_child.stdout.take().unwrap();
     let buffer = vec![0; 256];
     let mut cursor = Cursor::new(buffer);
+
+    // Track connection status
+    let mut connected = true;
+
     while mpv_child.try_wait()?.is_none() {
         cursor.set_position(0);
         let offset = cursor.position();
         let bread = output.read(&mut cursor.get_mut()[offset as usize..])?;
         cursor.set_position(offset + bread as u64);
         let read_data = &cursor.get_ref()[..cursor.position() as usize];
-
         let content = String::from_utf8_lossy(&read_data);
-
         let captures = re
             .captures_iter(&content)
             .last()
             .ok_or("Could not match the regex pattern.");
-
         let position = match captures {
             Ok(captures) => {
                 let (_paused, av_first, av_second, _percentage) = (
@@ -85,16 +87,45 @@ pub async fn discord_presence(
                 activity::Button::new("Discord", "https://discord.gg/4P2DaJFxbm"),
             ]);
 
-        std::thread::sleep(std::time::Duration::from_secs(2));
+        let result = client.set_activity(activity.clone());
 
-        client
-            .set_activity(activity)
-            .map_err(|_| anyhow!("Failed to set new activity!"))?;
+        match result {
+            Ok(_) => {
+                if !connected {
+                    println!("Reconnected to Discord successfully.");
+                    connected = true;
+                }
+            }
+            Err(_) => {
+                if connected {
+                    println!("Discord connection lost, attempting to reconnect...");
+                    connected = false;
+                }
+
+                match client.connect() {
+                    Ok(_) => {
+                        println!("Reconnected to Discord successfully.");
+                        connected = true;
+
+                        if let Err(_) = client.set_activity(activity) {
+                            println!("Failed to set activity after reconnection.");
+                        }
+                    }
+                    Err(_) => {
+                        println!("Failed to reconnect to Discord, will retry on next update.");
+                    }
+                }
+            }
+        }
     }
 
-    client
-        .close()
-        .map_err(|_| anyhow!("Failed to close client connection!"))?;
+    // Try to close connection gracefully
+    if let Err(_) = client.close() {
+        println!("Failed to close Discord connection gracefully.");
+    }
 
     Ok(())
 }
+
+
+
