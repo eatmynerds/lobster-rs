@@ -32,9 +32,10 @@ use utils::{
     fzf::{Fzf, FzfArgs, FzfSpawn},
     image_preview::{generate_desktop, image_preview},
     players::{
+        celluloid::{Celluloid, CelluloidArgs, CelluloidPlay},
+        iina::{Iina, IinaArgs, IinaPlay},
         mpv::{Mpv, MpvArgs, MpvPlay},
         vlc::{Vlc, VlcArgs, VlcPlay},
-        iina::{Iina, IinaArgs, IinaPlay},
     },
     rofi::{Rofi, RofiArgs, RofiSpawn},
 };
@@ -66,6 +67,7 @@ pub enum Player {
     Vlc,
     Mpv,
     Iina,
+    Celluloid,
     SyncPlay,
 }
 
@@ -600,6 +602,16 @@ fn handle_stream(
 
     async move {
         match player {
+            Player::Celluloid => {
+                let celluloid = Celluloid::new();
+
+                celluloid.play(CelluloidArgs {
+                    url,
+                    mpv_sub_files: subtitles_for_player,
+                    mpv_force_media_title: Some(media_info.2.clone()),
+                    ..Default::default()
+                })?;
+            }
             Player::Iina => {
                 let iina = Iina::new();
 
