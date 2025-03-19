@@ -678,7 +678,10 @@ fn handle_stream(
                     return Ok(());
                 }
 
-                let watchlater_dir = std::path::PathBuf::new().join("/tmp/lobster-rs/watchlater");
+                let watchlater_path =
+                    format!("{}/lobster-rs/watchlater", std::env::temp_dir().display());
+
+                let watchlater_dir = std::path::PathBuf::new().join(&watchlater_path);
 
                 if watchlater_dir.exists() {
                     std::fs::remove_dir_all(&watchlater_dir)
@@ -696,7 +699,7 @@ fn handle_stream(
                     url: url.clone(),
                     sub_files: subtitles_for_player.clone(),
                     force_media_title: Some(media_info.2.clone()),
-                    watch_later_dir: Some(String::from("/tmp/lobster-rs/watchlater")),
+                    watch_later_dir: Some(watchlater_path),
                     write_filename_in_watch_later_config: true,
                     save_position_on_quit: true,
                     ..Default::default()
