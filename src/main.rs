@@ -604,6 +604,20 @@ fn handle_stream(
     async move {
         match player {
             Player::Celluloid => {
+                if let Some(download_dir) = download_dir {
+                    download(
+                        download_dir,
+                        media_info.2,
+                        url,
+                        subtitles_for_player,
+                        subtitle_language,
+                    )
+                    .await?;
+
+                    info!("Download completed. Exiting...");
+                    return Ok(());
+                }
+
                 let celluloid = Celluloid::new();
 
                 celluloid.play(CelluloidArgs {
@@ -614,6 +628,20 @@ fn handle_stream(
                 })?;
             }
             Player::Iina => {
+                if let Some(download_dir) = download_dir {
+                    download(
+                        download_dir,
+                        media_info.2,
+                        url,
+                        subtitles_for_player,
+                        subtitle_language,
+                    )
+                    .await?;
+
+                    info!("Download completed. Exiting...");
+                    return Ok(());
+                }
+
                 let iina = Iina::new();
 
                 iina.play(IinaArgs {
@@ -741,6 +769,20 @@ fn handle_stream(
                 .await?;
             }
             Player::MpvAndroid => {
+                if let Some(download_dir) = download_dir {
+                    download(
+                        download_dir,
+                        media_info.2,
+                        url,
+                        subtitles_for_player,
+                        subtitle_language,
+                    )
+                    .await?;
+
+                    info!("Download completed. Exiting...");
+                    return Ok(());
+                }
+
                 println!("Playing videos on Android is not supported yet.");
                 std::process::exit(1);
             }
