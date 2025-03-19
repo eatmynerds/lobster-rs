@@ -68,6 +68,7 @@ pub enum Player {
     Mpv,
     Iina,
     Celluloid,
+    MpvAndroid,
     SyncPlay,
 }
 
@@ -898,6 +899,10 @@ pub async fn handle_servers(
                 }
             };
 
+            if cfg!(target_os = "android") {
+                player = Player::MpvAndroid;
+            }
+
             if settings.syncplay {
                 player = Player::SyncPlay;
             }
@@ -947,6 +952,8 @@ fn is_command_available(command: &str) -> bool {
 fn check_dependencies() {
     let dependencies = if cfg!(target_os = "windows") {
         vec!["mpv", "chafa", "ffmpeg", "fzf"]
+    } else if cfg!(target_os = "android") {
+        vec!["chafa", "ffmpeg", "fzf"]
     } else {
         vec!["mpv", "fzf", "rofi", "ffmpeg", "chafa"]
     };
