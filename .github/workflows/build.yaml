@@ -2,8 +2,8 @@ name: Build
 
 on:
   push:
-    tags:
-      - '*'
+    branches:
+      - master
 
 env:
   CARGO_TERM_COLOR: always
@@ -39,13 +39,21 @@ jobs:
           - os: windows-latest
             arch: aarch64
             target: aarch64-pc-windows-msvc
+          # ✅ Added Android targets
+          - os: ubuntu-latest
+            arch: aarch64
+            target: aarch64-linux-android
+          - os: ubuntu-latest
+            arch: x86_64
+            target: x86_64-linux-android
+
     runs-on: ${{ matrix.os }}
 
     steps:
       - name: 📥 Clone repository
         uses: actions/checkout@v3
 
-      - name: 🛠️ Install cross-compilation dependencies (Ubuntu AMD)
+      - name: 🛠️ Install cross-compilation dependencies (Linux)
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
@@ -70,9 +78,20 @@ jobs:
           env CROSS_CONTAINER_IN_CONTAINER=true
           cargo install cross
 
+      # ✅ Install cargo-ndk for Android builds
+      - name: 📱 Install Android NDK and cargo-ndk
+        if: matrix.target == 'aarch64-linux-android' || matrix.target == 'x86_64-linux-android'
+        run: |
+          sudo apt-get install -y unzip wget
+          wget -q https://dl.google.com/android/repository/android-ndk-r25b-linux.zip
+          unzip -q android-ndk-r25b-linux.zip
+          echo "ANDROID_NDK_HOME=$PWD/android-ndk-r25b" >> $GITHUB_ENV
+          echo "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin" >> $GITHUB_PATH
+          cargo install cargo-ndk
+
       - name: 🏗️ Build
+        if: matrix.target != 'aarch64-unknown-linux-gnu' && matrix.target != 'aarch64-linux-android' && matrix.target != 'x86_64-linux-android'
         uses: actions-rs/cargo@v1
-        if: matrix.target != 'aarch64-unknown-linux-gnu'
         with:
           command: build
           args: --release --target ${{ matrix.target }}
@@ -83,6 +102,11 @@ jobs:
         if: matrix.target == 'aarch64-unknown-linux-gnu'
         run: |
           cross build --release --target ${{ matrix.target }}
+
+      - name: 📱 Build for Android
+        if: matrix.target == 'aarch64-linux-android' || matrix.target == 'x86_64-linux-android'
+        run: |
+          cargo ndk -t ${{ matrix.arch }}-linux-android build --release
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
