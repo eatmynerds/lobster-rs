@@ -888,6 +888,7 @@ pub async fn handle_servers(
                 "mpv" => Player::Mpv,
                 "syncplay" => Player::SyncPlay,
                 "iina" => Player::Iina,
+                "celluloid" => Player::Celluloid,
                 _ => {
                     error!("Player not supported");
                     std::process::exit(1);
