@@ -23,13 +23,15 @@ jobs:
         os: [ubuntu-latest, windows-latest, macos-latest]
         arch: [x86_64, aarch64]
         include:
-          - arch: x86_64
+          - os: ubuntu-latest
+            arch: x86_64
             target: x86_64-unknown-linux-gnu
+          - os: ubuntu-latest
+            arch: aarch64
+            target: aarch64-unknown-linux-gnu
           - os: macos-latest
             arch: x86_64
             target: x86_64-apple-darwin
-          - arch: aarch64
-            target: aarch64-unknown-linux-gnu
           - os: macos-latest
             arch: aarch64
             target: aarch64-apple-darwin
@@ -39,13 +41,15 @@ jobs:
           - os: windows-latest
             arch: aarch64
             target: aarch64-pc-windows-msvc
-          # ✅ Added Android targets
+          # Android targets
           - os: ubuntu-latest
             arch: aarch64
             target: aarch64-linux-android
+            is_android: true
           - os: ubuntu-latest
             arch: x86_64
             target: x86_64-linux-android
+            is_android: true
 
     runs-on: ${{ matrix.os }}
 
@@ -54,7 +58,7 @@ jobs:
         uses: actions/checkout@v3
 
       - name: 🛠️ Install cross-compilation dependencies (Linux)
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && !matrix.is_android
         run: |
           sudo apt-get update
           sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu qemu-user
@@ -78,9 +82,9 @@ jobs:
           env CROSS_CONTAINER_IN_CONTAINER=true
           cargo install cross
 
-      # ✅ Updated Android NDK installation and OpenSSL configuration
+      # Android NDK installation and OpenSSL configuration
       - name: 📱 Install Android NDK and configure OpenSSL
-        if: matrix.target == 'aarch64-linux-android' || matrix.target == 'x86_64-linux-android'
+        if: matrix.is_android
         run: |
           sudo apt-get install -y unzip wget libssl-dev
           wget -q https://dl.google.com/android/repository/android-ndk-r25b-linux.zip
@@ -113,8 +117,9 @@ jobs:
           
           cd ..
 
-      - name: 🏗️ Build
-        if: matrix.target != 'aarch64-unknown-linux-gnu' && matrix.target != 'aarch64-linux-android' && matrix.target != 'x86_64-linux-android'
+      # Standard build for most targets
+      - name: 🏗️ Build (Standard)
+        if: "!matrix.is_android && matrix.target != 'aarch64-unknown-linux-gnu'"
         uses: actions-rs/cargo@v1
         with:
           command: build
@@ -122,14 +127,15 @@ jobs:
         env:
           CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
 
+      # Special build for ARM Linux
       - name: 🏗️ Build (Ubuntu ARM)
         if: matrix.target == 'aarch64-unknown-linux-gnu'
         run: |
           cross build --release --target ${{ matrix.target }}
 
-      # ✅ Updated Android build with fallback options
+      # Android build with fallback options
       - name: 📱 Build for Android
-        if: matrix.target == 'aarch64-linux-android' || matrix.target == 'x86_64-linux-android'
+        if: matrix.is_android
         run: |
           # Try building with OpenSSL configuration
           cargo ndk -t ${{ matrix.arch }}-linux-android build --release || \
@@ -171,10 +177,9 @@ jobs:
       - name: Zip all binaries 📥
         run: |
           find release -type f ! -name "*.d" -exec sh -c 'cp "$1" "$(dirname "$1" | xargs basename)_$(basename "$1")"' _ {} \;
-          ls -a 
-          # chmod +x *apple-darwin*
-          # chmod +x *linux-gnu*
-          # zip -r lobster-rs.zip *lobster-rs*
+          chmod +x *apple-darwin*
+          chmod +x *linux-gnu*
+          zip -r lobster-rs.zip *lobster-rs*
 
       - name: Upload zip to release 📤
         uses: actions/upload-release-asset@v1
