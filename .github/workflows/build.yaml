@@ -2,8 +2,8 @@ name: Build
 
 on:
   push:
-    branches:
-      - master
+    tags:
+      - '*'
 
 env:
   CARGO_TERM_COLOR: always
@@ -236,6 +236,7 @@ jobs:
           find release -type f ! -name "*.d" -exec sh -c 'cp "$1" "$(dirname "$1" | xargs basename)_$(basename "$1")"' _ {} \;
           chmod +x *apple-darwin*
           chmod +x *linux-gnu*
+          chmod +x *linux-android*
           zip -r lobster-rs.zip *lobster-rs*
 
       - name: Upload zip to release
