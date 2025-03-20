@@ -324,9 +324,9 @@ async fn launcher(
 
                     fzf_args.preview = Some(
                         r#"
-                selected=$(echo {} | cut -f2 | sed 's/\//-/g')
-                chafa -f sixels -s 80x40 "/tmp/images/${selected}.jpg"
-                    "#
+    set -l selected (echo {} | cut -f2 | sed 's/\//-/g')
+    chafa -f sixels -s 80x40 "/tmp/images/$selected.jpg"
+    "#
                         .to_string(),
                     );
                 }
