@@ -430,7 +430,7 @@ By passing this argument, you can see the debug output of the script.
 
 Please refer to the
 [wiki](https://github.com/eatmynerds/lobster-rs/wiki/Configuration) for
-information on how to configure the cli using the config file.
+information on how to configure the script using the configuration file.
 
 ## Dependencies
 
