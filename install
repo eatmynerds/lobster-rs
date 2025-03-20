@@ -1,91 +1,47 @@
 #!/bin/bash
-
 set -euo pipefail
-
 USER_AGENT="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
-
 API_URL="https://api.github.com/repos/eatmynerds/lobster-rs/releases/latest"
-
 TEMP_DIR="./temp-lobster"
-
-if [[ -d "$TEMP_DIR" ]]; then
-    rm -rf "$TEMP_DIR"
-fi
-mkdir -p "$TEMP_DIR"
-
-echo "Fetching release information..."
-RESPONSE=$(curl -sSL -H "User-Agent: $USER_AGENT" "$API_URL")
-
-DOWNLOAD_URL=$(echo "$RESPONSE" | jq -r '.assets[0].browser_download_url')
-
-if [[ -z "$DOWNLOAD_URL" ]]; then
-    echo "Error: Could not find a download URL in the API response."
-    exit 1
-fi
-echo "Found download URL: $DOWNLOAD_URL"
-
-echo "Downloading asset..."
-ZIP_FILE="$TEMP_DIR/asset.zip"
-curl -sSL "$DOWNLOAD_URL" -o "$ZIP_FILE"
-
-echo "Extracting asset..."
-unzip -q "$ZIP_FILE" -d "$TEMP_DIR"
-
-OS=$(uname -s | tr '[:upper:]' '[:lower:]')
 ARCH=$(uname -m)
-
-case "$OS" in
-    *linux*)
-        if [[ "$ARCH" == "x86_64" ]]; then
-            BUILD_TARGET="x86_64-unknown-linux-gnu_lobster-rs"
-        else
-            BUILD_TARGET="${ARCH}-unknown-linux-gnu_lobster-rs"
-        fi
-        ;;
-    *darwin*)
-        if [[ "$ARCH" == "x86_64" ]]; then
-            BUILD_TARGET="x86_64-apple-darwin_lobster-rs"
-        else
-            BUILD_TARGET="aarch64-apple-darwin_lobster-rs"
-        fi
-        ;;
-    *cygwin* | *mingw* | *msys* | *windows_nt*)
-        if [[ "$ARCH" == "x86_64" ]]; then
-            BUILD_TARGET="x86_64-pc-windows-msvc_lobster-rs.exe"
-        else
-            BUILD_TARGET="aarch64-pc-windows-msvc_lobster-rs.exe"
-        fi
-        ;;
-    *)
-        echo "Error: Unsupported platform $OS-$ARCH"
-        exit 1
-        ;;
-esac
-
-echo "Looking for build target: $BUILD_TARGET"
-
-FOUND_FILE=$(find "$TEMP_DIR" -type f -name "$BUILD_TARGET")
-
-if [[ -z "$FOUND_FILE" ]]; then
-    echo "Error: Could not find the build target file in the extracted assets."
+OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+# Exit early for unsupported architectures
+if [[ "$ARCH" =~ ^(i[3-6]86)$ ]]; then
+    echo "Error: 32-bit x86 architectures are not supported. Compile from source instead."
     exit 1
 fi
+# Cleanup and prepare temp directory
+rm -rf "$TEMP_DIR" && mkdir -p "$TEMP_DIR"
+# Fetch release information
+DOWNLOAD_URL=$(curl -sSL -H "User-Agent: $USER_AGENT" "$API_URL" | jq -r '.assets[0].browser_download_url')
+[[ -z "$DOWNLOAD_URL" ]] && { echo "Error: No download URL found."; exit 1; }
+# Download and extract
+curl -sSL "$DOWNLOAD_URL" -o "$TEMP_DIR/asset.zip"
+unzip -q "$TEMP_DIR/asset.zip" -d "$TEMP_DIR"
+# Detect Android via ADB or system properties
+if command -v getprop &>/dev/null; then OS="android"; fi
+if [[ "${1:-}" == "--android" && -n "$(command -v adb)" ]]; then OS="android"; ARCH=$(adb shell uname -m); fi
+# Determine build target
+case "$OS" in
+    *linux*)   BUILD_TARGET="${ARCH}-unknown-linux-gnu_lobster-rs";;
+    *darwin*)  BUILD_TARGET="${ARCH}-apple-darwin_lobster-rs";;
+    *android*) BUILD_TARGET="${ARCH}-linux-android_lobster-rs";;
+    *msys*|*cygwin*|*mingw*|*windows*) BUILD_TARGET="${ARCH}-pc-windows-msvc_lobster-rs.exe";;
+    *) echo "Error: Unsupported platform $OS-$ARCH"; exit 1;;
+esac
+# Locate binary
+FOUND_FILE=$(find "$TEMP_DIR" -type f -name "$BUILD_TARGET")
+[[ -z "$FOUND_FILE" ]] && { echo "Error: Build target not found."; exit 1; }
 
-DEST_FILENAME="lobster-rs"
-if [[ "$OS" == "windows_nt" ]]; then
-    DEST_FILENAME="$DEST_FILENAME.exe"
+# Determine output filename based on platform
+if [[ "$OS" =~ msys|cygwin|mingw|windows ]]; then
+    DEST_PATH="./lobster-rs.exe"
+else
+    DEST_PATH="./lobster-rs"
 fi
 
-DEST_PATH="./$DEST_FILENAME"
-if [[ -f "$DEST_PATH" ]]; then
-    rm "$DEST_PATH"
-fi
-
-mv "$FOUND_FILE" "$DEST_PATH"
-chmod +x "$DEST_PATH"
-
-echo "Cleaning up..."
+# Move binary to destination
+mv "$FOUND_FILE" "$DEST_PATH" && chmod +x "$DEST_PATH"
+# Cleanup and finish
 rm -rf "$TEMP_DIR"
-
-echo "Done! The binary has been saved to $DEST_PATH."
-
+echo "Done! Binary saved to $DEST_PATH."

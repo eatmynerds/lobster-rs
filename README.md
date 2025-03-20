@@ -34,12 +34,6 @@ A [`lobster`](https://github.com/justchokingaround/lobster) rewrite in Rust. Wit
 - [Contributing](#contributing)
 - [Uninstall](#uninstall)
 
-## TODO:
-
-#### Platform Support:
-- [ ] Add Android support.
-- [ ] Add support for Termux (Linux-based terminal emulator for Android).
-
 ## Installation
 
 ### Prerequisites
