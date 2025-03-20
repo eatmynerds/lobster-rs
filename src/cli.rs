@@ -10,37 +10,8 @@ use crate::utils::{
 use crate::{handle_servers, launcher};
 use crate::{Args, MediaType};
 use anyhow::anyhow;
-use log::{debug, error, info, warn};
+use log::{debug, error, info};
 use std::{io, io::Write, sync::Arc};
-
-pub fn subtitles_prompt() -> bool {
-    warn!(
-        "Subtitle functionality is unreliable and may significantly slow down video playback since FlixHQ provides incorrect subtitle URLs. (this affects downloading aswell)"
-    );
-
-    loop {
-        print!("Do you want to try and use subtitles anyway? [y/N]: ");
-
-        io::stdout().flush().unwrap();
-
-        let mut input = String::new();
-        io::stdin().read_line(&mut input).unwrap();
-
-        let input = input.trim();
-
-        match input {
-            "y" => {
-                return true;
-            }
-            "n" => {
-                return false;
-            }
-            _ => {
-                println!("Incorrect option. Please enter 'y' or 'n'.");
-            }
-        }
-    }
-}
 
 pub fn get_input(rofi: bool) -> anyhow::Result<String> {
     if rofi {

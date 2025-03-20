@@ -21,6 +21,7 @@ A [`lobster`](https://github.com/justchokingaround/lobster) rewrite in Rust. Wit
   - [Rofi Menu](#--rofi-argument)
   - [Provider Selection](#-p----provider-provider-argument)
   - [Quality Selection](#-q----quality-quality-argument)
+  - [No Subtitles](#-n----no-subtitles-argument)
   - [Recent Content](#--recent-tvmovie-argument)
   - [Syncplay](#-s----syncplay-argument)
   - [Trending Content](#-t----trending-tvmovie-argument)
@@ -327,6 +328,16 @@ Example use case:
 
 ```sh
 lobster-rs -q 720 "the godfather"
+```
+
+### `-n` / `--no-subtitles` argument
+
+By passing this argument, you can watch a movie or TV show without subtitles.
+
+Example use case:
+
+```sh
+lobster-rs -n "rick and morty"
 ```
 
 ### `--recent` `<tv|movie>` argument

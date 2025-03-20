@@ -21,7 +21,7 @@ use utils::presence::discord_presence;
 use utils::SpawnError;
 
 mod cli;
-use cli::{run, subtitles_prompt};
+use cli::run;
 mod flixhq;
 use flixhq::flixhq::{FlixHQ, FlixHQEpisode, FlixHQSourceType, FlixHQSubtitles};
 mod providers;
@@ -232,6 +232,10 @@ pub struct Args {
     /// Enable debug mode (prints debug info to stdout and saves it to $TEMPDIR/lobster.log)
     #[clap(long)]
     pub debug: bool,
+
+    /// Disable subtitles
+    #[clap(short, long)]
+    pub no_subs: bool,
 }
 
 fn fzf_launcher<'a>(args: &'a mut FzfArgs) -> anyhow::Result<String> {
@@ -580,19 +584,19 @@ fn handle_stream(
     subtitles: Vec<String>,
     subtitle_language: Option<Languages>,
 ) -> BoxFuture<'static, anyhow::Result<()>> {
-    let subtitles_choice = subtitles_prompt();
+    let subtitles_choice = settings.no_subs;
     let player_url = url.clone();
 
     let subtitles_for_player = if subtitles_choice {
+        info!("Continuing without subtitles");
+        None
+    } else {
         if subtitles.len() > 0 {
             Some(subtitles.clone())
         } else {
             info!("No subtitles available!");
             None
         }
-    } else {
-        info!("Continuing without subtitles");
-        None
     };
 
     let subtitle_language = if subtitles_choice {
@@ -807,13 +811,8 @@ fn handle_stream(
             Player::SyncPlay => {
                 let url = url_quality(url, settings.quality).await?;
 
-                Command::new("nohup")
-                    .args([
-                        r#""syncplay""#,
-                        &url,
-                        "--",
-                        &format!("--force-media-title={}", media_info.2),
-                    ])
+                Command::new("syncplay")
+                    .args([&url, "--", &format!("--force-media-title={}", media_info.2)])
                     .spawn()
                     .map_err(|e| {
                         error!("Failed to start Syncplay: {}", e);
