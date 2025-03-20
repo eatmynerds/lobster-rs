@@ -429,8 +429,8 @@ By passing this argument, you can see the debug output of the script.
 ## Configuration
 
 Please refer to the
-[wiki](https://github.com/justchokingaround/lobster/wiki/Configuration) for
-information on how to configure the script using the config file.
+[wiki](https://github.com/eatmynerds/lobster-rs/wiki/Configuration) for
+information on how to configure the cli using the config file.
 
 ## Dependencies
 
