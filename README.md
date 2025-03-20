@@ -7,6 +7,7 @@ A [`lobster`](https://github.com/justchokingaround/lobster) rewrite in Rust. Wit
 - [Installation](#installation)
   - [Prerequisites](#prerequisites)
   - [Linux](#linux)
+  - [Android](#android)
   - [NixOS (Flake)](#nixos-flake)
   - [Mac](#mac)
   - [Windows (Git Bash)](#windows-git-bash)
@@ -50,6 +51,20 @@ chmod +x install && \
 sudo mv lobster-rs /usr/local/bin/lobster-rs && \
 rm install && \
 echo 'lobster-rs installed successfully! :) \nRun `lobster-rs --help` to get started.'
+```
+
+#### Android
+
+```sh
+curl -sL https://github.com/eatmynerds/lobster-rs/raw/master/install -o install && \
+chmod +x install && \
+./install && \
+mv lobster-rs /data/data/com.termux/files/usr/bin/lobster-rs
+```
+
+If you're using Android 14 or newer make sure to run this before:
+```sh
+pkg install termux-am
 ```
 
 #### Nixos (Flake)
