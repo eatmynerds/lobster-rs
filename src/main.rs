@@ -839,8 +839,6 @@ pub async fn handle_servers(
         media_info.0, media_info.1
     );
 
-    dbg!(&episode_info);
-
     let (episode_id, new_episode_info, server_results) = if let Some(next_episode) = next_episode {
         let episode_info = episode_info.clone().expect("Failed to get episode info");
         let mut episode_number = episode_info.1; // Current episode (0-based)
