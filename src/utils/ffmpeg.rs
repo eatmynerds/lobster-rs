@@ -126,7 +126,7 @@ impl FfmpegSpawn for Ffmpeg {
             .status()
             .map_err(|e| {
                 error!("Error executing ffmpeg command: {}", e);
-                SpawnError::IOError(e)
+                std::process::exit(1);
             })?;
 
         if exit_status.code() != Some(0) {

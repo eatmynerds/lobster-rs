@@ -375,15 +375,12 @@ pub async fn run(settings: Arc<Args>, config: Arc<Config>) -> anyhow::Result<()>
             .await;
 
             let season_number = season_choice.replace("Season ", "").parse::<usize>()?;
-            println!("{}", season_number);
 
             let mut episodes: Vec<String> = vec![];
 
             for episode in &tv.seasons.episodes[season_number - 1] {
                 episodes.push(episode.title.to_string());
             }
-
-            println!("{:#?}", episodes);
 
             let episode_choice = launcher(
                 &vec![],
@@ -408,8 +405,6 @@ pub async fn run(settings: Arc<Args>, config: Arc<Config>) -> anyhow::Result<()>
 
             let episode_choices = &tv.seasons.episodes[season_number - 1];
 
-            println!("{:#?}", episode_choices);
-
             let episode_number = episode_choices
                 .iter()
                 .position(|episode| episode.title == episode_choice)
@@ -418,18 +413,14 @@ pub async fn run(settings: Arc<Args>, config: Arc<Config>) -> anyhow::Result<()>
                     std::process::exit(1);
                 });
 
-            println!("{:#?}", episode_number);
-
-            let episode_id = tv.seasons.episodes[season_number - 1][episode_number]
-                .id
-                .clone();
+            let episode_info = &tv.seasons.episodes[season_number - 1][episode_number];
 
             handle_servers(
                 config,
                 settings,
-                Some(false),
-                (&episode_id, media_id, media_title, media_image),
-                Some((dbg!(season_number), dbg!(episode_number), tv.seasons.episodes)),
+                None,
+                (&episode_info.id, media_id, &format!("{} - {}", media_title, episode_info.title), media_image),
+                Some((season_number, episode_number, tv.seasons.episodes.clone())),
             )
             .await?;
         }
@@ -439,7 +430,7 @@ pub async fn run(settings: Arc<Args>, config: Arc<Config>) -> anyhow::Result<()>
         handle_servers(
             config,
             settings,
-            Some(false),
+            None,
             (episode_id, media_id, media_title, media_image),
             None,
         )

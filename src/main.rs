@@ -5,7 +5,7 @@ use futures::StreamExt;
 use lazy_static::lazy_static;
 use log::{debug, error, info, warn, LevelFilter};
 use regex::Regex;
-use reqwest::Client;
+use reqwest::{Client};
 use self_update::cargo_crate_version;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -43,7 +43,7 @@ use utils::{
 pub static BASE_URL: &'static str = "https://flixhq.to";
 
 lazy_static! {
-    static ref CLIENT: Client = Client::new();
+    static ref CLIENT: Client = Client::new(); 
 }
 
 #[derive(ValueEnum, Debug, Clone, Serialize, Deserialize)]
@@ -423,7 +423,8 @@ fn update() -> anyhow::Result<()> {
 }
 
 async fn url_quality(url: String, quality: Option<Quality>) -> anyhow::Result<String> {
-    let input = CLIENT.get(url).send().await?.text().await?;
+    let client = Client::builder().danger_accept_invalid_certs(true).build()?;
+    let input = client.get(url).send().await?.text().await?;
 
     let url_re = Regex::new(r"https://[^\s]+m3u8").unwrap();
     let res_re = Regex::new(r"RESOLUTION=(\d+)x(\d+)").unwrap();
@@ -861,8 +862,6 @@ pub async fn handle_servers(
                 std::process::exit(1);
             }
         } else {
-            dbg!(episode_number);
-            dbg!(season_number);
             // Move to the previous episode
             if episode_number > 1 {
                 episode_number -= 1;
