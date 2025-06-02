@@ -200,7 +200,7 @@ pub async fn run(settings: Arc<Args>, config: Arc<Config>) -> anyhow::Result<()>
                         config.clone(),
                         settings.clone(),
                         Some(false),
-                        (entry[1], entry[2], entry[6], entry[3]),
+                        (None, entry[1], entry[2], entry[6], entry[3]),
                         Some((season_number, episode_number, tv.seasons.episodes)),
                     )
                     .await?;
@@ -211,7 +211,7 @@ pub async fn run(settings: Arc<Args>, config: Arc<Config>) -> anyhow::Result<()>
                     config.clone(),
                     settings.clone(),
                     Some(false),
-                    (entry[1], entry[2], entry[0], entry[3]),
+                    (None, entry[1], entry[2], entry[0], entry[3]),
                     None,
                 )
                 .await?
@@ -419,7 +419,7 @@ pub async fn run(settings: Arc<Args>, config: Arc<Config>) -> anyhow::Result<()>
                 config,
                 settings,
                 None,
-                (&episode_info.id, media_id, media_title, media_image),
+                (Some(episode_info.title.clone()), &episode_info.id, media_id, media_title, media_image),
                 Some((season_number, episode_number, tv.seasons.episodes.clone())),
             )
             .await?;
@@ -431,7 +431,7 @@ pub async fn run(settings: Arc<Args>, config: Arc<Config>) -> anyhow::Result<()>
             config,
             settings,
             None,
-            (episode_id, media_id, media_title, media_image),
+            (None, episode_id, media_id, media_title, media_image),
             None,
         )
         .await?;

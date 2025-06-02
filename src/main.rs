@@ -5,7 +5,7 @@ use futures::StreamExt;
 use lazy_static::lazy_static;
 use log::{debug, error, info, warn, LevelFilter};
 use regex::Regex;
-use reqwest::{Client};
+use reqwest::Client;
 use self_update::cargo_crate_version;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -43,7 +43,7 @@ use utils::{
 pub static BASE_URL: &'static str = "https://flixhq.to";
 
 lazy_static! {
-    static ref CLIENT: Client = Client::new(); 
+    static ref CLIENT: Client = Client::new();
 }
 
 #[derive(ValueEnum, Debug, Clone, Serialize, Deserialize)]
@@ -423,7 +423,9 @@ fn update() -> anyhow::Result<()> {
 }
 
 async fn url_quality(url: String, quality: Option<Quality>) -> anyhow::Result<String> {
-    let client = Client::builder().danger_accept_invalid_certs(true).build()?;
+    let client = Client::builder()
+        .danger_accept_invalid_certs(true)
+        .build()?;
     let input = client.get(url).send().await?.text().await?;
 
     let url_re = Regex::new(r"https://[^\s]+m3u8").unwrap();
@@ -480,7 +482,7 @@ async fn url_quality(url: String, quality: Option<Quality>) -> anyhow::Result<St
 }
 
 async fn player_run_choice(
-    media_info: (String, String, String, String),
+    media_info: (Option<String>, String, String, String, String),
     episode_info: Option<(usize, usize, Vec<Vec<FlixHQEpisode>>)>,
     config: Arc<Config>,
     settings: Arc<Args>,
@@ -490,7 +492,7 @@ async fn player_run_choice(
     subtitles: Vec<String>,
     subtitle_language: Option<Languages>,
 ) -> anyhow::Result<()> {
-    let process_stdin = if media_info.1.starts_with("tv/") {
+    let process_stdin = if media_info.2.starts_with("tv/") {
         Some("Next Episode\nPrevious Episode\nReplay\nExit\nSearch".to_string())
     } else {
         Some("Replay\nExit\nSearch".to_string())
@@ -522,10 +524,11 @@ async fn player_run_choice(
                 settings.clone(),
                 Some(true),
                 (
-                    media_info.0.as_str(),
+                    media_info.0,
                     media_info.1.as_str(),
                     media_info.2.as_str(),
                     media_info.3.as_str(),
+                    media_info.4.as_str(),
                 ),
                 episode_info,
             )
@@ -537,10 +540,11 @@ async fn player_run_choice(
                 settings.clone(),
                 Some(false),
                 (
-                    media_info.0.as_str(),
+                    media_info.0,
                     media_info.1.as_str(),
                     media_info.2.as_str(),
                     media_info.3.as_str(),
+                    media_info.4.as_str(),
                 ),
                 episode_info,
             )
@@ -580,7 +584,7 @@ fn handle_stream(
     player: Player,
     download_dir: Option<String>,
     url: String,
-    media_info: (String, String, String, String),
+    media_info: (Option<String>, String, String, String, String),
     episode_info: Option<(usize, usize, Vec<Vec<FlixHQEpisode>>)>,
     subtitles: Vec<String>,
     subtitle_language: Option<Languages>,
@@ -612,7 +616,7 @@ fn handle_stream(
                 if let Some(download_dir) = download_dir {
                     download(
                         download_dir,
-                        media_info.2,
+                        media_info.3,
                         url,
                         subtitles_for_player,
                         subtitle_language,
@@ -623,12 +627,18 @@ fn handle_stream(
                     return Ok(());
                 }
 
+                let title = if let Some(title) = media_info.0 {
+                    format!("{} - {}", media_info.3, title)
+                } else {
+                    media_info.3
+                };
+
                 let celluloid = Celluloid::new();
 
                 celluloid.play(CelluloidArgs {
                     url,
                     mpv_sub_files: subtitles_for_player,
-                    mpv_force_media_title: Some(media_info.2.clone()),
+                    mpv_force_media_title: Some(title),
                     ..Default::default()
                 })?;
             }
@@ -636,7 +646,7 @@ fn handle_stream(
                 if let Some(download_dir) = download_dir {
                     download(
                         download_dir,
-                        media_info.2,
+                        media_info.3,
                         url,
                         subtitles_for_player,
                         subtitle_language,
@@ -646,6 +656,12 @@ fn handle_stream(
                     info!("Download completed. Exiting...");
                     return Ok(());
                 }
+
+                let title = if let Some(title) = media_info.0 {
+                    format!("{} - {}", media_info.3, title)
+                } else {
+                    media_info.3
+                };
 
                 let iina = Iina::new();
 
@@ -654,7 +670,7 @@ fn handle_stream(
                     no_stdin: true,
                     keep_running: true,
                     mpv_sub_files: subtitles_for_player,
-                    mpv_force_media_title: Some(media_info.2.clone()),
+                    mpv_force_media_title: Some(title),
                     ..Default::default()
                 })?;
             }
@@ -662,7 +678,7 @@ fn handle_stream(
                 if let Some(download_dir) = download_dir {
                     download(
                         download_dir,
-                        media_info.2,
+                        media_info.3,
                         url,
                         subtitles_for_player,
                         subtitle_language,
@@ -675,12 +691,18 @@ fn handle_stream(
 
                 let url = url_quality(url, settings.quality).await?;
 
+                let title: String = if let Some(title_part) = &media_info.0 {
+                    format!("{} - {}", media_info.3, title_part)
+                } else {
+                    media_info.3.to_string()
+                };
+
                 let vlc = Vlc::new();
 
                 vlc.play(VlcArgs {
                     url,
                     input_slave: subtitles_for_player,
-                    meta_title: Some(media_info.2.clone()),
+                    meta_title: Some(title),
                     ..Default::default()
                 })?;
 
@@ -701,7 +723,7 @@ fn handle_stream(
                 if let Some(download_dir) = download_dir {
                     download(
                         download_dir,
-                        media_info.2,
+                        media_info.3,
                         url,
                         subtitles_for_player.clone(),
                         subtitle_language,
@@ -727,12 +749,18 @@ fn handle_stream(
 
                 let url = url_quality(url, settings.quality).await?;
 
+                let title: String = if let Some(title_part) = &media_info.0 {
+                    format!("{} - {}", media_info.3, title_part)
+                } else {
+                    media_info.3.to_string()
+                };
+
                 let mpv = Mpv::new();
 
                 let mut child = mpv.play(MpvArgs {
                     url: url.clone(),
                     sub_files: subtitles_for_player.clone(),
-                    force_media_title: Some(media_info.2.clone()),
+                    force_media_title: Some(title),
                     watch_later_dir: Some(watchlater_path),
                     write_filename_in_watch_later_config: true,
                     save_position_on_quit: true,
@@ -788,6 +816,12 @@ fn handle_stream(
                     return Ok(());
                 }
 
+                let title: String = if let Some(title_part) = media_info.0 {
+                    format!("{} - {}", media_info.3, title_part)
+                } else {
+                    media_info.3.to_string()
+                };
+
                 Command::new("am")
                     .args([
                         "start",
@@ -801,7 +835,7 @@ fn handle_stream(
                         "is.xyz.mpv/.MPVActivity",
                         "-e",
                         "title",
-                        &media_info.2,
+                        &title,
                     ])
                     .spawn()
                     .map_err(|e| {
@@ -812,8 +846,14 @@ fn handle_stream(
             Player::SyncPlay => {
                 let url = url_quality(url, settings.quality).await?;
 
+                let title: String = if let Some(title_part) = media_info.0 {
+                    format!("{} - {}", media_info.3, title_part)
+                } else {
+                    media_info.3.to_string()
+                };
+
                 Command::new("syncplay")
-                    .args([&url, "--", &format!("--force-media-title={}", media_info.2)])
+                    .args([&url, "--", &format!("--force-media-title={}", title)])
                     .spawn()
                     .map_err(|e| {
                         error!("Failed to start Syncplay: {}", e);
@@ -831,73 +871,78 @@ pub async fn handle_servers(
     config: Arc<Config>,
     settings: Arc<Args>,
     next_episode: Option<bool>,
-    media_info: (&str, &str, &str, &str),
+    media_info: (Option<String>, &str, &str, &str, &str),
     episode_info: Option<(usize, usize, Vec<Vec<FlixHQEpisode>>)>,
 ) -> anyhow::Result<()> {
     debug!(
         "Fetching servers for episode_id: {}, media_id: {}",
-        media_info.0, media_info.1
+        media_info.1, media_info.2
     );
 
-    let (episode_id, new_episode_info, server_results) = if let Some(next_episode) = next_episode {
-        let episode_info = episode_info.clone().expect("Failed to get episode info");
-        let mut episode_number = episode_info.1; // Current episode (0-based)
-        let mut season_number = episode_info.0; // Current season (1-based)
+    let (episode_id, episode_title, new_episode_info, server_results) =
+        if let Some(next_episode) = next_episode {
+            let episode_info = episode_info.clone().expect("Failed to get episode info");
+            let mut episode_number = episode_info.1; // Current episode (0-based)
+            let mut season_number = episode_info.0; // Current season (1-based)
 
-        let total_seasons = episode_info.2.len();
+            let total_seasons = episode_info.2.len();
 
-        if next_episode {
-            let total_episodes = episode_info.2[season_number - 1].len();
+            if next_episode {
+                let total_episodes = episode_info.2[season_number - 1].len();
 
-            if episode_number + 1 < total_episodes {
-                // Move to next episode
-                episode_number += 1;
-            } else if season_number < total_seasons {
-                // Move to the first episode of the next season
-                season_number += 1;
-                episode_number = 0;
+                if episode_number + 1 < total_episodes {
+                    // Move to next episode
+                    episode_number += 1;
+                } else if season_number < total_seasons {
+                    // Move to the first episode of the next season
+                    season_number += 1;
+                    episode_number = 0;
+                } else {
+                    // No next episode or season available, staying at the last episode
+                    eprintln!("No next episode or season available.");
+                    std::process::exit(1);
+                }
             } else {
-                // No next episode or season available, staying at the last episode
-                eprintln!("No next episode or season available.");
-                std::process::exit(1);
+                // Move to the previous episode
+                // Move to the previous episode
+                if episode_number > 0 {
+                    episode_number -= 1;
+                } else if season_number > 1 {
+                    // Move to the last episode of the previous season
+                    season_number -= 1;
+                    episode_number = episode_info.2[season_number - 1].len() - 1;
+                } else {
+                    // No previous episode available, staying at the first episode
+                    eprintln!("No previous episode available.");
+                    std::process::exit(1);
+                }
             }
+
+            let episode_id = episode_info.2[season_number - 1][episode_number].id.clone();
+            let episode_title = episode_info.2[season_number - 1][episode_number]
+                .title
+                .clone();
+
+            (
+                episode_id.clone(),
+                Some(episode_title),
+                Some((season_number, episode_number, episode_info.2)),
+                FlixHQ
+                    .servers(&episode_id, media_info.2)
+                    .await
+                    .map_err(|_| anyhow::anyhow!("Timeout while fetching servers"))?,
+            )
         } else {
-
-            // Move to the previous episode
-            // Move to the previous episode
-            if episode_number > 0 {
-                episode_number -= 1;
-            } else if season_number > 1 {
-                // Move to the last episode of the previous season
-                season_number -= 1;
-                episode_number = episode_info.2[season_number - 1].len() - 1;
-            } else {
-                // No previous episode available, staying at the first episode
-                eprintln!("No previous episode available.");
-                std::process::exit(1);
-            }
-        }
-
-        let episode_id = episode_info.2[season_number - 1][episode_number].id.clone();
-
-        (
-            episode_id.clone(),
-            Some((season_number, episode_number, episode_info.2)),
-            FlixHQ
-                .servers(&episode_id, media_info.1)
-                .await
-                .map_err(|_| anyhow::anyhow!("Timeout while fetching servers"))?,
-        )
-    } else {
-        (
-            media_info.0.to_string(),
-            episode_info,
-            FlixHQ
-                .servers(media_info.0, media_info.1)
-                .await
-                .map_err(|_| anyhow::anyhow!("Timeout while fetching servers"))?,
-        )
-    };
+            (
+                media_info.1.to_string(),
+                media_info.0,
+                episode_info,
+                FlixHQ
+                    .servers(media_info.1, media_info.2)
+                    .await
+                    .map_err(|_| anyhow::anyhow!("Timeout while fetching servers"))?,
+            )
+        };
 
     if server_results.servers.is_empty() {
         return Err(anyhow::anyhow!("No servers found"));
@@ -923,7 +968,7 @@ pub async fn handle_servers(
     debug!("Fetching sources for selected server: {:?}", server);
 
     let sources = FlixHQ
-        .sources(episode_id.as_str(), media_info.1, *server)
+        .sources(episode_id.as_str(), media_info.2, *server)
         .await
         .map_err(|_| anyhow::anyhow!("Timeout while fetching sources"))?;
 
@@ -992,10 +1037,11 @@ pub async fn handle_servers(
                     .cloned(),
                 vidcloud_sources[0].file.to_string(),
                 (
+                    episode_title,
                     episode_id,
-                    media_info.1.to_string(),
                     media_info.2.to_string(),
                     media_info.3.to_string(),
+                    media_info.4.to_string(),
                 ),
                 new_episode_info.map(|(a, b, c)| (a, b, c)),
                 selected_subtitles,
