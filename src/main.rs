@@ -861,6 +861,8 @@ pub async fn handle_servers(
                 std::process::exit(1);
             }
         } else {
+            dbg!(episode_number);
+            dbg!(season_number);
             // Move to the previous episode
             if episode_number > 1 {
                 episode_number -= 1;
@@ -871,7 +873,8 @@ pub async fn handle_servers(
             }
         }
 
-        let episode_id = episode_info.2[season_number - 1][episode_number].id.clone();
+        
+        let episode_id = episode_info.2[season_number - 1][episode_number - 1].id.clone();
 
         (
             episode_id.clone(),

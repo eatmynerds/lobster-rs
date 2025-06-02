@@ -40,7 +40,7 @@ impl VidCloud {
 impl VideoExtractor for VidCloud {
     async fn extract(&mut self, server_url: &str) -> anyhow::Result<()> {
         let request_url = format!(
-            "https://misc-embed-decrypt.v4sq52.easypanel.host/embed?embed_url={}&referrer={}",
+            "https://decryptapi.broggl.farm/embed?embed_url={}&referrer={}",
             server_url, BASE_URL
         );
 

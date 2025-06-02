@@ -199,7 +199,7 @@ pub async fn run(settings: Arc<Args>, config: Arc<Config>) -> anyhow::Result<()>
                     handle_servers(
                         config.clone(),
                         settings.clone(),
-                        None,
+                        Some(false),
                         (entry[1], entry[2], entry[6], entry[3]),
                         Some((season_number, episode_number, tv.seasons.episodes)),
                     )
@@ -210,7 +210,7 @@ pub async fn run(settings: Arc<Args>, config: Arc<Config>) -> anyhow::Result<()>
                 handle_servers(
                     config.clone(),
                     settings.clone(),
-                    None,
+                    Some(false),
                     (entry[1], entry[2], entry[0], entry[3]),
                     None,
                 )
@@ -375,12 +375,15 @@ pub async fn run(settings: Arc<Args>, config: Arc<Config>) -> anyhow::Result<()>
             .await;
 
             let season_number = season_choice.replace("Season ", "").parse::<usize>()?;
+            println!("{}", season_number);
 
             let mut episodes: Vec<String> = vec![];
 
             for episode in &tv.seasons.episodes[season_number - 1] {
                 episodes.push(episode.title.to_string());
             }
+
+            println!("{:#?}", episodes);
 
             let episode_choice = launcher(
                 &vec![],
@@ -405,6 +408,8 @@ pub async fn run(settings: Arc<Args>, config: Arc<Config>) -> anyhow::Result<()>
 
             let episode_choices = &tv.seasons.episodes[season_number - 1];
 
+            println!("{:#?}", episode_choices);
+
             let episode_number = episode_choices
                 .iter()
                 .position(|episode| episode.title == episode_choice)
@@ -412,6 +417,8 @@ pub async fn run(settings: Arc<Args>, config: Arc<Config>) -> anyhow::Result<()>
                     error!("Invalid episode choice: '{}'", episode_choice);
                     std::process::exit(1);
                 });
+
+            println!("{:#?}", episode_number);
 
             let episode_id = tv.seasons.episodes[season_number - 1][episode_number]
                 .id
@@ -422,7 +429,7 @@ pub async fn run(settings: Arc<Args>, config: Arc<Config>) -> anyhow::Result<()>
                 settings,
                 Some(false),
                 (&episode_id, media_id, media_title, media_image),
-                Some((season_number, episode_number, tv.seasons.episodes)),
+                Some((dbg!(season_number), dbg!(episode_number), tv.seasons.episodes)),
             )
             .await?;
         }
@@ -432,7 +439,7 @@ pub async fn run(settings: Arc<Args>, config: Arc<Config>) -> anyhow::Result<()>
         handle_servers(
             config,
             settings,
-            None,
+            Some(false),
             (episode_id, media_id, media_title, media_image),
             None,
         )
