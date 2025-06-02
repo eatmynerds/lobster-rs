@@ -839,44 +839,52 @@ pub async fn handle_servers(
         media_info.0, media_info.1
     );
 
-    let (episode_id, server_results) = if let Some(next_episode) = next_episode {
+    dbg!(&episode_info);
+
+    let (episode_id, new_episode_info, server_results) = if let Some(next_episode) = next_episode {
         let episode_info = episode_info.clone().expect("Failed to get episode info");
-        let mut episode_number = episode_info.1; // Current episode
-        let mut season_number = episode_info.0; // Current season
+        let mut episode_number = episode_info.1; // Current episode (0-based)
+        let mut season_number = episode_info.0; // Current season (1-based)
 
         let total_seasons = episode_info.2.len();
 
         if next_episode {
             let total_episodes = episode_info.2[season_number - 1].len();
 
-            if episode_number < total_episodes {
+            if episode_number + 1 < total_episodes {
                 // Move to next episode
                 episode_number += 1;
             } else if season_number < total_seasons {
                 // Move to the first episode of the next season
                 season_number += 1;
-                episode_number = 1;
+                episode_number = 0;
             } else {
                 // No next episode or season available, staying at the last episode
                 eprintln!("No next episode or season available.");
                 std::process::exit(1);
             }
         } else {
+
             // Move to the previous episode
-            if episode_number > 1 {
+            // Move to the previous episode
+            if episode_number > 0 {
                 episode_number -= 1;
             } else if season_number > 1 {
                 // Move to the last episode of the previous season
                 season_number -= 1;
-                episode_number = episode_info.2[season_number - 1].len();
+                episode_number = episode_info.2[season_number - 1].len() - 1;
+            } else {
+                // No previous episode available, staying at the first episode
+                eprintln!("No previous episode available.");
+                std::process::exit(1);
             }
         }
 
-        
-        let episode_id = episode_info.2[season_number - 1][episode_number - 1].id.clone();
+        let episode_id = episode_info.2[season_number - 1][episode_number].id.clone();
 
         (
             episode_id.clone(),
+            Some((season_number, episode_number, episode_info.2)),
             FlixHQ
                 .servers(&episode_id, media_info.1)
                 .await
@@ -885,6 +893,7 @@ pub async fn handle_servers(
     } else {
         (
             media_info.0.to_string(),
+            episode_info,
             FlixHQ
                 .servers(media_info.0, media_info.1)
                 .await
@@ -985,12 +994,12 @@ pub async fn handle_servers(
                     .cloned(),
                 vidcloud_sources[0].file.to_string(),
                 (
-                    media_info.0.to_string(),
+                    episode_id,
                     media_info.1.to_string(),
                     media_info.2.to_string(),
                     media_info.3.to_string(),
                 ),
-                episode_info.map(|(a, b, c)| (a, b, c)),
+                new_episode_info.map(|(a, b, c)| (a, b, c)),
                 selected_subtitles,
                 Some(settings.language.unwrap_or(Languages::English)),
             )

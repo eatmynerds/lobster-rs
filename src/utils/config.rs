@@ -105,7 +105,6 @@ impl Config {
             match std::process::Command::new("rofi").arg("-v").output() {
                 Ok(_) => {}
                 Err(_) => {
-                    warn!("Rofi is not installed. Cannot use it as an external menu.");
                     args.rofi = false;
                 }
             }

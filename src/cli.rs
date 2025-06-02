@@ -419,7 +419,7 @@ pub async fn run(settings: Arc<Args>, config: Arc<Config>) -> anyhow::Result<()>
                 config,
                 settings,
                 None,
-                (&episode_info.id, media_id, &format!("{} - {}", media_title, episode_info.title), media_image),
+                (&episode_info.id, media_id, media_title, media_image),
                 Some((season_number, episode_number, tv.seasons.episodes.clone())),
             )
             .await?;
