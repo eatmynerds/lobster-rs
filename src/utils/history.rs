@@ -1,17 +1,24 @@
 use crate::flixhq::flixhq::FlixHQEpisode;
-use crate::CLIENT;
 use anyhow::anyhow;
+use reqwest::Client;
 use std::fs::OpenOptions;
 use std::io::prelude::*;
 
 pub async fn save_progress(url: String) -> anyhow::Result<(String, f32)> {
-    let watchlater_dir = std::path::PathBuf::new().join("/tmp/lobster-rs/watchlater");
+    let watchlater_dir = std::path::PathBuf::new().join(format!(
+        "{}/lobster-rs/watchlater",
+        std::env::temp_dir().display()
+    ));
 
     let mut durations: Vec<f32> = vec![];
 
     let re = regex::Regex::new(r#"#EXTINF:([0-9]*\.?[0-9]+),"#).unwrap();
 
-    let response = CLIENT.get(url).send().await?.text().await?;
+    let client = Client::builder()
+        .danger_accept_invalid_certs(true)
+        .build()?;
+
+    let response = client.get(url).send().await?.text().await?;
 
     for capture in re.captures_iter(&response) {
         if let Some(duration) = capture.get(1) {
@@ -19,7 +26,7 @@ pub async fn save_progress(url: String) -> anyhow::Result<(String, f32)> {
         }
     }
 
-    let entries: Vec<_> = std::fs::read_dir(watchlater_dir)?
+    let entries: Vec<_> = std::fs::read_dir(dbg!(watchlater_dir))?
         .filter_map(|entry| entry.ok())
         .filter(|entry| entry.path().is_file())
         .collect();

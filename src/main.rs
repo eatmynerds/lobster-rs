@@ -19,6 +19,7 @@ use utils::history::{save_history, save_progress};
 use utils::image_preview::remove_desktop_and_tmp;
 use utils::presence::discord_presence;
 use utils::SpawnError;
+use serde_json::json;
 
 mod cli;
 use cli::run;
@@ -426,6 +427,7 @@ async fn url_quality(url: String, quality: Option<Quality>) -> anyhow::Result<St
     let client = Client::builder()
         .danger_accept_invalid_certs(true)
         .build()?;
+
     let input = client.get(url).send().await?.text().await?;
 
     let url_re = Regex::new(r"https://[^\s]+m3u8").unwrap();
@@ -972,7 +974,7 @@ pub async fn handle_servers(
         .await
         .map_err(|_| anyhow::anyhow!("Timeout while fetching sources"))?;
 
-    debug!("Fetched sources: {:?}", sources);
+    debug!("{}", json!(sources));
 
     if settings.json {
         info!("{}", serde_json::to_value(&sources).unwrap());
@@ -987,7 +989,7 @@ pub async fn handle_servers(
                 return Err(anyhow::anyhow!("No sources available from VidCloud"));
             }
 
-            debug!("Found subtitles: {:?}", vidcloud_subtitles);
+            debug!("{}", json!(vidcloud_subtitles));
 
             let selected_subtitles: Vec<String> = futures::stream::iter(vidcloud_subtitles)
                 .filter(|subtitle| {
@@ -1132,7 +1134,10 @@ async fn main() -> anyhow::Result<()> {
 
     if args.edit {
         if cfg!(not(target_os = "windows")) {
-            let editor = std::env::var("EDITOR").expect("EDITOR environment variable not set");
+            let editor = std::env::var("EDITOR").map_err(|_| {
+                error!("EDITOR environment variable not set!");
+                std::process::exit(1);
+            }).unwrap();
             std::process::Command::new(editor)
                 .arg(
                     dirs::config_dir()
@@ -1143,8 +1148,10 @@ async fn main() -> anyhow::Result<()> {
                 .expect("Failed to open config file with editor");
 
             info!("Done editing config file.");
+            std::process::exit(0);
         } else {
-            info!("The `edit` flag is not supported on Windows.");
+            error!("The `edit` flag is not supported on Windows.");
+            std::process::exit(1);
         }
     }
 
