@@ -26,7 +26,7 @@ pub async fn save_progress(url: String) -> anyhow::Result<(String, f32)> {
         }
     }
 
-    let entries: Vec<_> = std::fs::read_dir(dbg!(watchlater_dir))?
+    let entries: Vec<_> = std::fs::read_dir(watchlater_dir)?
         .filter_map(|entry| entry.ok())
         .filter(|entry| entry.path().is_file())
         .collect();
@@ -152,7 +152,7 @@ pub async fn save_history(
                         }
                     }
 
-                    if remove_from_history(media_info.1.clone()).is_ok() {
+                    if remove_from_history(media_info.2.clone()).is_ok() {
                     } else {
                         write_to_history(format!(
                             "{}\t{}\t{}\t{}\t{}\t{}\t{}",

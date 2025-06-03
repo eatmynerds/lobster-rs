@@ -78,7 +78,11 @@ impl MpvPlay for Mpv {
 
         if let Some(watch_later_dir) = args.watch_later_dir {
             debug!("Setting watch later directory: {}", watch_later_dir);
-            temp_args.push(format!("--watch-later-dir={}", watch_later_dir));
+            if cfg!(not(target_os = "windows")) {
+                temp_args.push(format!("--watch-later-dir={}", watch_later_dir));
+            } else {
+                temp_args.push(format!("--watch-later-directory={}", watch_later_dir));
+            }
         }
 
         if let Some(input_ipc_server) = args.input_ipc_server {

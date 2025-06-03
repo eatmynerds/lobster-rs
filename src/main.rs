@@ -769,13 +769,6 @@ fn handle_stream(
                     ..Default::default()
                 })?;
 
-                if config.history {
-                    let (position, progress) = save_progress(url).await?;
-
-                    save_history(media_info.clone(), episode_info.clone(), position, progress)
-                        .await?;
-                }
-
                 if settings.rpc {
                     let season_and_episode_num = episode_info.as_ref().map(|(a, b, _)| (*a, *b));
 
@@ -788,6 +781,13 @@ fn handle_stream(
                     .await?;
                 } else {
                     child.wait()?;
+                }
+
+                if config.history {
+                    let (position, progress) = save_progress(url).await?;
+
+                    save_history(media_info.clone(), episode_info.clone(), position, progress)
+                        .await?;
                 }
 
                 player_run_choice(

@@ -129,7 +129,7 @@ pub async fn run(settings: Arc<Args>, config: Arc<Config>) -> anyhow::Result<()>
                     }
 
                     history_choices.push(format!(
-                        "{} (tv) Season {} {}\t{}\t{}\t{}\t{}\t{}\t{}",
+                        "{} (tv) Season {} {}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
                         title,
                         entries[4],
                         entries[5],
@@ -139,6 +139,7 @@ pub async fn run(settings: Arc<Args>, config: Arc<Config>) -> anyhow::Result<()>
                         entries[4],
                         episode_number,
                         title,
+                        entries[5],
                     ))
                 }
                 "movie" => {
@@ -200,7 +201,7 @@ pub async fn run(settings: Arc<Args>, config: Arc<Config>) -> anyhow::Result<()>
                         config.clone(),
                         settings.clone(),
                         Some(false),
-                        (None, entry[1], entry[2], entry[6], entry[3]),
+                        (Some(entry[7].to_string()), entry[1], entry[2], entry[6], entry[3]),
                         Some((season_number, episode_number, tv.seasons.episodes)),
                     )
                     .await?;
