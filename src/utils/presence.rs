@@ -6,6 +6,7 @@ use std::{
     io::{Cursor, Read},
     process::Child,
 };
+use log::{info, error, warn};
 
 lazy_static! {
     static ref FILE_PATH: String = if cfg!(windows) {
@@ -28,8 +29,8 @@ pub async fn discord_presence(
         .map_err(|_| anyhow!("Failed to create discord IPC client!"))?;
 
     match client.connect() {
-        Ok(_) => println!("Client connected to Discord successfully."),
-        Err(_) => println!("Client failed to connect to Discord, will retry automatically."),
+        Ok(_) => info!("Client connected to Discord successfully."),
+        Err(_) => warn!("Client failed to connect to Discord, will retry automatically."),
     };
 
     let details = match season_and_episode_num {
@@ -92,27 +93,27 @@ pub async fn discord_presence(
         match result {
             Ok(_) => {
                 if !connected {
-                    println!("Reconnected to Discord successfully.");
+                    info!("Reconnected to Discord successfully.");
                     connected = true;
                 }
             }
             Err(_) => {
                 if connected {
-                    println!("Discord connection lost, attempting to reconnect...");
+                    warn!("Discord connection lost, attempting to reconnect...");
                     connected = false;
                 }
 
                 match client.connect() {
                     Ok(_) => {
-                        println!("Reconnected to Discord successfully.");
+                        info!("Reconnected to Discord successfully.");
                         connected = true;
 
                         if let Err(_) = client.set_activity(activity) {
-                            println!("Failed to set activity after reconnection.");
+                            warn!("Failed to set activity after reconnection.");
                         }
                     }
                     Err(_) => {
-                        println!("Failed to reconnect to Discord, will retry on next update.");
+                        warn!("Failed to reconnect to Discord, will retry on next update.");
                     }
                 }
             }
@@ -121,7 +122,7 @@ pub async fn discord_presence(
 
     // Try to close connection gracefully
     if let Err(_) = client.close() {
-        println!("Failed to close Discord connection gracefully.");
+        error!("Failed to close Discord connection gracefully.");
     }
 
     Ok(())

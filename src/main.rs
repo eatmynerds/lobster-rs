@@ -874,23 +874,23 @@ pub async fn handle_servers(
     settings: Arc<Args>,
     next_episode: Option<bool>,
     media_info: (Option<String>, &str, &str, &str, &str),
-    episode_info: Option<(usize, usize, Vec<Vec<FlixHQEpisode>>)>,
+    show_info: Option<(usize, usize, Vec<Vec<FlixHQEpisode>>)>,
 ) -> anyhow::Result<()> {
     debug!(
         "Fetching servers for episode_id: {}, media_id: {}",
         media_info.1, media_info.2
     );
 
-    let (episode_id, episode_title, new_episode_info, server_results) =
+    let (episode_id, episode_title, new_show_info, server_results) =
         if let Some(next_episode) = next_episode {
-            let episode_info = episode_info.clone().expect("Failed to get episode info");
-            let mut episode_number = episode_info.1; // Current episode (0-based)
-            let mut season_number = episode_info.0; // Current season (1-based)
+            let show_info = show_info.clone().expect("Failed to get episode info");
+            let mut episode_number = show_info.1; 
+            let mut season_number = show_info.0; 
 
-            let total_seasons = episode_info.2.len();
+            let total_seasons = show_info.2.len();
 
             if next_episode {
-                let total_episodes = episode_info.2[season_number - 1].len();
+                let total_episodes = show_info.2[season_number - 1].len();
 
                 if episode_number + 1 < total_episodes {
                     // Move to next episode
@@ -901,36 +901,32 @@ pub async fn handle_servers(
                     episode_number = 0;
                 } else {
                     // No next episode or season available, staying at the last episode
-                    eprintln!("No next episode or season available.");
+                    error!("No next episode or season available.");
                     std::process::exit(1);
                 }
             } else {
-                // Move to the previous episode
                 // Move to the previous episode
                 if episode_number > 0 {
                     episode_number -= 1;
                 } else if season_number > 1 {
                     // Move to the last episode of the previous season
                     season_number -= 1;
-                    episode_number = episode_info.2[season_number - 1].len() - 1;
+                    episode_number = show_info.2[season_number - 1].len() - 1;
                 } else {
                     // No previous episode available, staying at the first episode
-                    eprintln!("No previous episode available.");
+                    error!("No previous episode available.");
                     std::process::exit(1);
                 }
             }
 
-            let episode_id = episode_info.2[season_number - 1][episode_number].id.clone();
-            let episode_title = episode_info.2[season_number - 1][episode_number]
-                .title
-                .clone();
+            let episode_info= show_info.2[season_number - 1][episode_number].clone();
 
             (
-                episode_id.clone(),
-                Some(episode_title),
-                Some((season_number, episode_number, episode_info.2)),
+                episode_info.id.clone(),
+                Some(episode_info.title),
+                Some((season_number, episode_number, show_info.2)),
                 FlixHQ
-                    .servers(&episode_id, media_info.2)
+                    .servers(&episode_info.id, media_info.2)
                     .await
                     .map_err(|_| anyhow::anyhow!("Timeout while fetching servers"))?,
             )
@@ -938,7 +934,7 @@ pub async fn handle_servers(
             (
                 media_info.1.to_string(),
                 media_info.0,
-                episode_info,
+                show_info,
                 FlixHQ
                     .servers(media_info.1, media_info.2)
                     .await
@@ -1045,7 +1041,7 @@ pub async fn handle_servers(
                     media_info.3.to_string(),
                     media_info.4.to_string(),
                 ),
-                new_episode_info.map(|(a, b, c)| (a, b, c)),
+                new_show_info.map(|(a, b, c)| (a, b, c)),
                 selected_subtitles,
                 Some(settings.language.unwrap_or(Languages::English)),
             )
