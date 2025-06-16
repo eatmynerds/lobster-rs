@@ -1,7 +1,7 @@
 use crate::utils::SpawnError;
 use log::{debug, error};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 pub struct Celluloid {
     pub executable: String,

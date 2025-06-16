@@ -17,7 +17,7 @@ pub async fn save_progress(url: String) -> anyhow::Result<(String, f32)> {
     let client = Client::builder()
         .danger_accept_invalid_certs(true)
         .build()?;
-
+    
     let response = client.get(url).send().await?.text().await?;
 
     for capture in re.captures_iter(&response) {

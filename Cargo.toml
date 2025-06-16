@@ -1,32 +1,30 @@
 [package]
 name = "lobster-rs"
-version = "0.1.5"
-edition = "2021"
+version = "0.1.0"
+edition = "2024"
 
 [dependencies]
-anyhow = "1.0.95"
-clap = { version = "4.5.23", features = ["derive"] }
-crossterm = "0.28.1"
-ctrlc = "3.4.5"
-dirs = "5.0.1"
+anyhow = "1.0.98"
+base64 = "0.22.1"
+clap = { version = "4.5.40", features = ["derive"] }
+crossterm = "0.29.0"
+ctrlc = "3.4.7"
+dirs = "6.0.0"
 discord-rich-presence = "0.2.5"
 futures = "0.3.31"
-image = "0.25.5"
+image = "0.25.6"
 lazy_static = "1.5.0"
-log = "0.4.22"
+log = "0.4.27"
+openssl = { version = "0.10.73" }
 regex = "1.11.1"
-reqwest = "0.12.9"
-rich-logger = { version = "0.1.16", features = [ "pretty_json"] }
-self_update = { version = "0.41.0", features = ["archive-tar", "archive-zip", "compression-flate2", "compression-zip-deflate"] }
-serde = { version = "1.0.216", features = ["derive"] }
-serde_json = "1.0.134"
-thiserror = "2.0.9"
-tokio = { version = "1.42.0", features = ["full"] }
-toml = "0.8.19"
-visdom = "1.0.2"
-
-[package.metadata.cross.build]
-pre-build = [
-    "dpkg --add-architecture $CROSS_DEB_ARCH", 
-    "apt-get update && apt-get --assume-yes install libssl-dev:$CROSS_DEB_ARCH"
-]
+reqwest = "0.12.20"
+rich-logger = { version = "0.1.17", features = ["pretty_json"] }
+self_update = "0.42.0"
+serde = { version = "1.0.219", features = ["derive"] }
+serde_json = "1.0.140"
+strum = { version = "0.27.1", features = ["derive"] }
+thiserror = "2.0.12"
+tokio = { version = "1.45.1", features = ["full"] }
+toml = "0.8.23"
+url = "2.5.4"
+visdom = "1.0.3"

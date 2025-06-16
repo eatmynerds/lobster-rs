@@ -1,7 +1,7 @@
 use crate::utils::SpawnError;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
 use log::{debug, error};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 pub struct Iina {
     pub executable: String,

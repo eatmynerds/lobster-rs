@@ -1,12 +1,12 @@
 use anyhow::anyhow;
-use discord_rich_presence::{activity, DiscordIpc, DiscordIpcClient};
+use discord_rich_presence::{DiscordIpc, DiscordIpcClient, activity};
 use lazy_static::lazy_static;
+use log::{error, info, warn};
 use regex::Regex;
 use std::{
     io::{Cursor, Read},
     process::Child,
 };
-use log::{info, error, warn};
 
 lazy_static! {
     static ref FILE_PATH: String = if cfg!(windows) {
@@ -127,6 +127,3 @@ pub async fn discord_presence(
 
     Ok(())
 }
-
-
-

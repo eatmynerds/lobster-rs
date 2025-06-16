@@ -1,10 +1,10 @@
 use crate::{
+    CLIENT, MediaType, Provider,
     flixhq::html::FlixHQHTML,
     providers::{
-        vidcloud::{Source, Track, VidCloud},
         VideoExtractor,
+        vidcloud::{Source, Track, VidCloud},
     },
-    MediaType, Provider, BASE_URL, CLIENT,
 };
 use anyhow::anyhow;
 use log::{debug, error};
@@ -89,6 +89,8 @@ pub enum FlixHQSourceType {
 pub enum FlixHQSubtitles {
     VidCloud(Vec<Track>),
 }
+
+pub static BASE_URL: &'static str = "https://flixhq.to";
 
 pub struct FlixHQ;
 

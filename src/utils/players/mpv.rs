@@ -2,8 +2,8 @@ use crate::utils::SpawnError;
 use crossterm::style::Stylize;
 use log::{debug, error};
 use std::process::{Child, Stdio};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 pub struct Mpv {
     pub executable: String,
