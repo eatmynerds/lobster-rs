@@ -2,8 +2,8 @@ use crate::utils::SpawnError;
 use ctrlc;
 use log::{debug, error};
 use std::sync::{
-    atomic::{AtomicBool, Ordering},
     Arc,
+    atomic::{AtomicBool, Ordering},
 };
 
 pub struct Vlc {

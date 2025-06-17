@@ -5,42 +5,35 @@ A [`lobster`](https://github.com/justchokingaround/lobster) rewrite in Rust. Wit
 ## Overview
 
 - [Installation](#installation)
-  - [Linux](#linux-from-source)
-  - [NixOS](#nixos-flake)
+  - [Prerequisites](#prerequisites)
+  - [Linux](#linux)
+  - [Android](#android)
+  - [NixOS (Flake)](#nixos-flake)
   - [Mac](#mac)
-  - [Windows](#windows)
+  - [Windows (Git Bash)](#windows-git-bash)
 - [Usage](#usage)
-  - [`--clear-history`](#clear-history-argument)
-  - [`-d` / `--download`](#d----download-path-argument)
-  - [`-e` / `--edit`](#e----edit-argument)
-  - [`-i` / `--image-preview`](#i----image-preview-argument)
-  - [`-j` / `--json`](#j----json-argument)
-  - [`-l` / `--language`](#l----language-language-argument)
-  - [`--rofi`](#rofi-argument)
-  - [`-p` / `--provider`](#p----provider-provider-argument)
-  - [`-q` / `--quality`](#q----quality-quality-argument)
-  - [`--recent`](#recent-tvmovie-argument)
-  - [`-t` / `--trending`](#t----trending-tvmovie-argument)
-  - [`-c` / `--continue`](#c----continue-argument) 
-  <!-- - [`--rpc`](#discord--discord-presence--rpc--presence-argument-todo) (TODO) -->
-  <!-- - [`-s` / `--syncplay`](#s--syncplay-argument-todo) (TODO) -->
-  - [`-u` / `--update`](#u----update-argument)
-  - [`-V` / `--version`](#v----version-argument)
-  - [`--debug`](#debug-argument)
+  - [Clear History](#--clear-history-argument)
+  - [Download](#-d----download-path-argument)
+  - [Discord Presence](#-r----rpc-argument)
+  - [Edit Configuration](#-e----edit-argument)
+  - [Image Preview](#-i----image-preview-argument)
+  - [JSON Output](#-j----json-argument)
+  - [Language Selection](#-l----language-language-argument)
+  - [Rofi Menu](#--rofi-argument)
+  - [Provider Selection](#-p----provider-provider-argument)
+  - [Quality Selection](#-q----quality-quality-argument)
+  - [No Subtitles](#-n----no-subtitles-argument)
+  - [Recent Content](#--recent-tvmovie-argument)
+  - [Syncplay](#-s----syncplay-argument)
+  - [Trending Content](#-t----trending-tvmovie-argument)
+  - [Continue Watching](#-c----continue-argument)
+  - [Update](#-u----update-argument)
+  - [Version](#-v----version-argument)
+  - [Debug Mode](#--debug-argument)
 - [Configuration](#configuration)
+- [Dependencies](#dependencies)
 - [Contributing](#contributing)
 - [Uninstall](#uninstall)
-
-## TODO:
-
-#### Features:
-- [ ] Implement `--rpc` / `--discord-presence` / `--presence` argument: Add support for Discord RPC presence.
-- [ ] Implement `-s` / `--syncplay` argument: Enable syncplay functionality.
-
-#### Platform Support:
-- [ ] Add Android support.
-- [ ] Add support for IINA (macOS media player).
-- [ ] Add support for Termux (Linux-based terminal emulator for Android).
 
 ## Installation
 
@@ -60,15 +53,29 @@ rm install && \
 echo 'lobster-rs installed successfully! :) \nRun `lobster-rs --help` to get started.'
 ```
 
+#### Android
+
+```sh
+curl -sL https://github.com/eatmynerds/lobster-rs/raw/master/install -o install && \
+chmod +x install && \
+./install && \
+mv lobster-rs /data/data/com.termux/files/usr/bin/lobster-rs
+```
+
+If you're using Android 14 or newer make sure to run this before:
+```sh
+pkg install termux-am
+```
+
 #### Nixos (Flake)
 
-Add this to you flake.nix
+Add this to your flake.nix
 
 ```nix
 inputs.lobster.url = "github:eatmynerds/lobster-rs";
 ```
 
-Add this to you configuration.nix
+Add this to your configuration.nix
 
 ```nix
 environment.systemPackages = [
@@ -76,7 +83,7 @@ environment.systemPackages = [
 ];
 ```
 
-##### Or for run the script once use
+##### Or to run the script once use
 
 ```sh
 nix run github:eatmynerds/lobster-rs
@@ -223,6 +230,15 @@ or using a relative path:
 lobster-rs -d "../rick_and_morty/" "rick and morty"
 ```
 
+### `-r` / `--rpc` argument
+
+By passing this argument you make use of discord rich presence so you can let
+your friends know what you are watching.
+
+```sh
+lobster-rs --rpc
+```
+
 ### `-e` / `--edit` argument
 
 By passing this argument you can edit the config file using an editor of your
@@ -323,6 +339,16 @@ Example use case:
 lobster-rs -q 720 "the godfather"
 ```
 
+### `-n` / `--no-subtitles` argument
+
+By passing this argument, you can watch a movie or TV show without subtitles.
+
+Example use case:
+
+```sh
+lobster-rs -n "rick and morty"
+```
+
 ### `--recent` `<tv|movie>` argument
 
 By passing this argument, you can see watch most recently released movies and TV
@@ -333,6 +359,16 @@ Example use case:
 
 ```sh
 lobster-rs --recent tv
+```
+
+### `-s` / `--syncplay` argument
+
+By passing this argument, you can use [syncplay](https://syncplay.pl/) to watch
+videos with your friends. This will only work if you have syncplay installed and
+configured.
+
+```sh
+lobster-rs --syncplay
 ```
 
 ### `-t` / `--trending` `<tv|movie>` argument
@@ -393,8 +429,8 @@ By passing this argument, you can see the debug output of the script.
 ## Configuration
 
 Please refer to the
-[wiki](https://github.com/justchokingaround/lobster/wiki/Configuration) for
-information on how to configure the script using the config file.
+[wiki](https://github.com/eatmynerds/lobster-rs/wiki/Configuration) for
+information on how to configure the script using the configuration file.
 
 ## Dependencies
 
@@ -411,5 +447,35 @@ information on how to configure the script using the config file.
 git clone --depth 1 https://github.com/junegunn/fzf.git ~/.fzf
 ~/.fzf/install
 ```
+## Contributing
 
+All contributions are welcome, and I will to review them as soon as possible. If
+you want to contribute, please follow the following recommendations:
 
+- All help is appreciated, even if it's just a typo fix, or a small improvement
+- You do not need to be a programmer to contribute, you can also help by opening
+  issues, or by testing the script and reporting bugs
+- If you are unsure about something, please open an issue first, start a
+  discussion or message me personally
+- Please use `cargo fmt` to format your code
+- If you are adding a new feature, please make sure that it is configurable
+  (either through the config file and/or through command line arguments)
+
+## Uninstall
+### Linux
+
+```sh
+sudo rm $(which lobster-rs)
+```
+
+### Mac
+
+```sh
+rm "$(brew --prefix)"/bin/lobster-rs
+```
+
+### Windows
+
+```sh
+rm /usr/bin/lobster-rs
+```

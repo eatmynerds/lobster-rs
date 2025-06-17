@@ -1,11 +1,11 @@
 use super::flixhq::{
-    FlixHQ, FlixHQEpisode, FlixHQInfo, FlixHQMovie, FlixHQResult, FlixHQSeason, FlixHQServer,
-    FlixHQShow,
+    BASE_URL, FlixHQ, FlixHQEpisode, FlixHQInfo, FlixHQMovie, FlixHQResult, FlixHQSeason,
+    FlixHQServer, FlixHQShow,
 };
-use crate::{MediaType, BASE_URL};
+use crate::MediaType;
 use log::{debug, warn};
-use visdom::types::Elements;
 use visdom::Vis;
+use visdom::types::Elements;
 
 fn create_html_fragment(html: &str) -> Elements<'_> {
     Vis::load(html).expect("Failed to load HTML")

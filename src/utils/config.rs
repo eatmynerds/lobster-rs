@@ -17,6 +17,7 @@ pub struct Config {
     pub player: String,
     pub history: bool,
     pub image_preview: bool,
+    pub no_subs: bool,
     pub debug: bool,
 }
 
@@ -37,6 +38,7 @@ impl Config {
             subs_language: Languages::English,
             use_external_menu: false,
             image_preview: false,
+            no_subs: false,
             debug: false,
         }
     }
@@ -103,7 +105,6 @@ impl Config {
             match std::process::Command::new("rofi").arg("-v").output() {
                 Ok(_) => {}
                 Err(_) => {
-                    warn!("Rofi is not installed. Cannot use it as an external menu.");
                     args.rofi = false;
                 }
             }
@@ -117,6 +118,13 @@ impl Config {
             config.image_preview
         } else {
             args.image_preview
+        };
+
+        args.no_subs = if !args.no_subs {
+            debug!("Setting `no_subs` to {}", config.no_subs);
+            config.no_subs
+        } else {
+            args.no_subs
         };
 
         args.download = args.download.as_ref().map(|download| {

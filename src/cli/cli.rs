@@ -1,42 +1,172 @@
-use crate::flixhq::flixhq::{FlixHQ, FlixHQInfo};
-use crate::utils::image_preview::remove_desktop_and_tmp;
-use crate::utils::{
-    config::Config,
-    {
-        fzf::FzfArgs,
+use crate::{
+    Args, MediaType, Player,
+    cli::{Languages, stream::handle_servers},
+    flixhq::flixhq::{FlixHQ, FlixHQInfo, FlixHQEpisode},
+    utils::{
+        config::Config,
+        ffmpeg::{Ffmpeg, FfmpegArgs, FfmpegSpawn},
+        fzf::{Fzf, FzfArgs, FzfSpawn},
+        image_preview::{generate_desktop, image_preview, remove_desktop_and_tmp},
         rofi::{Rofi, RofiArgs, RofiSpawn},
     },
+    cli::stream::handle_stream
 };
-use crate::{handle_servers, launcher};
-use crate::{Args, MediaType};
+
 use anyhow::anyhow;
-use log::{debug, error, warn, info};
+use log::{debug, error, info, warn};
 use std::{io, io::Write, sync::Arc};
 
-pub fn subtitles_prompt() -> bool {
-    warn!(
-        "Subtitle functionality is unreliable and may significantly slow down video playback since FlixHQ provides incorrect subtitle URLs. (this affects downloading aswell)"
-    );
+fn fzf_launcher<'a>(args: &'a mut FzfArgs) -> anyhow::Result<String> {
+    debug!("Launching fzf with arguments: {:?}", args);
 
-    loop {
-        print!("Do you want to try and use subtitles anyway? [y/N]: ");
+    let mut fzf = Fzf::new();
 
-        io::stdout().flush().unwrap();
+    let output = fzf
+        .spawn(args)
+        .map(|output| {
+            let result = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            debug!("fzf completed with result: {}", result);
+            result
+        })
+        .unwrap_or_else(|e| {
+            error!("Failed to launch fzf: {}", e.to_string());
+            std::process::exit(1)
+        });
 
-        let mut input = String::new();
-        io::stdin().read_line(&mut input).unwrap();
+    if output.is_empty() {
+        return Err(anyhow!("No selection made. Exiting..."));
+    }
 
-        let input = input.trim();
+    Ok(output)
+}
 
-        match input {
-            "y" => {
-                return true;
+fn rofi_launcher<'a>(args: &'a mut RofiArgs) -> anyhow::Result<String> {
+    debug!("Launching rofi with arguments: {:?}", args);
+
+    let mut rofi = Rofi::new();
+
+    let output = rofi
+        .spawn(args)
+        .map(|output| {
+            let result = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            debug!("rofi completed with result: {}", result);
+            result
+        })
+        .unwrap_or_else(|e| {
+            error!("Failed to launch rofi: {}", e.to_string());
+            std::process::exit(1)
+        });
+
+    if output.is_empty() {
+        return Err(anyhow!("No selection made. Exiting..."));
+    }
+
+    Ok(output)
+}
+
+pub async fn download(
+    download_dir: String,
+    media_title: String,
+    url: String,
+    subtitles: Option<Vec<String>>,
+    subtitle_language: Option<Languages>,
+) -> anyhow::Result<()> {
+    info!("{}", format!(r#"Starting download for "{}""#, media_title));
+
+    let ffmpeg = Ffmpeg::new();
+
+    ffmpeg.embed_video(FfmpegArgs {
+        input_file: url,
+        log_level: Some("error".to_string()),
+        stats: true,
+        output_file: format!("{}/{}.mkv", download_dir, media_title),
+        subtitle_files: subtitles.as_ref(),
+        subtitle_language: Some(subtitle_language.unwrap_or(Languages::English).to_string()),
+        codec: Some("copy".to_string()),
+    })?;
+
+    Ok(())
+}
+
+async fn launcher(
+    image_preview_files: &Vec<(String, String, String)>,
+    rofi: bool,
+    rofi_args: &mut RofiArgs,
+    fzf_args: &mut FzfArgs,
+) -> String {
+    if image_preview_files.is_empty() {
+        debug!("No image preview files provided.");
+    } else {
+        debug!(
+            "Generating image previews for {} files.",
+            image_preview_files.len()
+        );
+        let temp_images_dirs = image_preview(image_preview_files)
+            .await
+            .expect("Failed to generate image previews");
+
+        if rofi {
+            for (media_name, media_id, image_path) in temp_images_dirs {
+                debug!(
+                    "Generating desktop entry for: {} (ID: {})",
+                    media_name, media_id
+                );
+                generate_desktop(media_name, media_id, image_path)
+                    .expect("Failed to generate desktop entry for image preview");
             }
-            "n" => {
-                return false;
+
+            rofi_args.show = Some("drun".to_string());
+            rofi_args.drun_categories = Some("imagepreview".to_string());
+            rofi_args.show_icons = true;
+            rofi_args.dmenu = false;
+        } else {
+            match std::process::Command::new("chafa").arg("-v").output() {
+                Ok(_) => {
+                    debug!("Setting up fzf preview script.");
+
+                    fzf_args.preview = Some(
+                        r#"
+    set -l selected (echo {} | cut -f2 | sed 's/\//-/g')
+    chafa -f sixels -s 80x40 "/tmp/images/$selected.jpg"
+    "#
+                        .to_string(),
+                    );
+                }
+                Err(_) => {
+                    warn!("Chafa isn't installed. Cannot preview images with fzf.");
+                }
             }
-            _ => {
-                println!("Incorrect option. Please enter 'y' or 'n'.");
+        }
+    }
+
+    if rofi {
+        debug!("Using rofi launcher.");
+        match rofi_launcher(rofi_args) {
+            Ok(output) => output,
+            Err(_) => {
+                if !image_preview_files.is_empty() {
+                    for (_, _, media_id) in image_preview_files {
+                        remove_desktop_and_tmp(media_id.to_string())
+                            .expect("Failed to remove old .desktop files & tmp images");
+                    }
+                }
+
+                std::process::exit(1)
+            }
+        }
+    } else {
+        debug!("Using fzf launcher.");
+        match fzf_launcher(fzf_args) {
+            Ok(output) => output,
+            Err(_) => {
+                if !image_preview_files.is_empty() {
+                    for (_, _, media_id) in image_preview_files {
+                        remove_desktop_and_tmp(media_id.to_string())
+                            .expect("Failed to remove old .desktop files & tmp images");
+                    }
+                }
+
+                std::process::exit(1)
             }
         }
     }
@@ -117,7 +247,7 @@ pub async fn run(settings: Arc<Args>, config: Arc<Config>) -> anyhow::Result<()>
         std::process::exit(0);
     }
 
-    if settings.r#continue {
+    if settings.resume {
         let history_file = dirs::data_local_dir()
             .expect("Failed to find local dir")
             .join("lobster-rs/lobster_history.txt");
@@ -158,7 +288,7 @@ pub async fn run(settings: Arc<Args>, config: Arc<Config>) -> anyhow::Result<()>
                     }
 
                     history_choices.push(format!(
-                        "{} (tv) Season {} {}\t{}\t{}\t{}\t{}\t{}\t{}",
+                        "{} (tv) Season {} {}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
                         title,
                         entries[4],
                         entries[5],
@@ -168,6 +298,7 @@ pub async fn run(settings: Arc<Args>, config: Arc<Config>) -> anyhow::Result<()>
                         entries[4],
                         episode_number,
                         title,
+                        entries[5],
                     ))
                 }
                 "movie" => {
@@ -228,8 +359,14 @@ pub async fn run(settings: Arc<Args>, config: Arc<Config>) -> anyhow::Result<()>
                     handle_servers(
                         config.clone(),
                         settings.clone(),
-                        None,
-                        (entry[1], entry[2], entry[6], entry[3]),
+                        Some(false),
+                        (
+                            Some(entry[7].to_string()),
+                            entry[1],
+                            entry[2],
+                            entry[6],
+                            entry[3],
+                        ),
                         Some((season_number, episode_number, tv.seasons.episodes)),
                     )
                     .await?;
@@ -239,8 +376,8 @@ pub async fn run(settings: Arc<Args>, config: Arc<Config>) -> anyhow::Result<()>
                 handle_servers(
                     config.clone(),
                     settings.clone(),
-                    None,
-                    (entry[1], entry[2], entry[0], entry[3]),
+                    Some(false),
+                    (None, entry[1], entry[2], entry[0], entry[3]),
                     None,
                 )
                 .await?
@@ -442,16 +579,20 @@ pub async fn run(settings: Arc<Args>, config: Arc<Config>) -> anyhow::Result<()>
                     std::process::exit(1);
                 });
 
-            let episode_id = tv.seasons.episodes[season_number - 1][episode_number]
-                .id
-                .clone();
+            let episode_info = &tv.seasons.episodes[season_number - 1][episode_number];
 
             handle_servers(
                 config,
                 settings,
-                Some(true),
-                (&episode_id, media_id, media_title, media_image),
-                Some((season_number, episode_number, tv.seasons.episodes)),
+                None,
+                (
+                    Some(episode_info.title.clone()),
+                    &episode_info.id,
+                    media_id,
+                    media_title,
+                    media_image,
+                ),
+                Some((season_number, episode_number, tv.seasons.episodes.clone())),
             )
             .await?;
         }
@@ -462,10 +603,108 @@ pub async fn run(settings: Arc<Args>, config: Arc<Config>) -> anyhow::Result<()>
             config,
             settings,
             None,
-            (episode_id, media_id, media_title, media_image),
+            (None, episode_id, media_id, media_title, media_image),
             None,
         )
         .await?;
+    }
+
+    Ok(())
+}
+
+
+pub async fn player_run_choice(
+    media_info: (Option<String>, String, String, String, String),
+    episode_info: Option<(usize, usize, Vec<Vec<FlixHQEpisode>>)>,
+    config: Arc<Config>,
+    settings: Arc<Args>,
+    player: Player,
+    download_dir: Option<String>,
+    player_url: String,
+    subtitles: Vec<String>,
+    subtitle_language: Option<Languages>,
+) -> anyhow::Result<()> {
+    let process_stdin = if media_info.2.starts_with("tv/") {
+        Some("Next Episode\nPrevious Episode\nReplay\nExit\nSearch".to_string())
+    } else {
+        Some("Replay\nExit\nSearch".to_string())
+    };
+
+    let run_choice = launcher(
+        &vec![],
+        settings.rofi,
+        &mut RofiArgs {
+            mesg: Some("Select: ".to_string()),
+            process_stdin: process_stdin.clone(),
+            dmenu: true,
+            case_sensitive: true,
+            ..Default::default()
+        },
+        &mut FzfArgs {
+            prompt: Some("Select: ".to_string()),
+            process_stdin,
+            reverse: true,
+            ..Default::default()
+        },
+    )
+    .await;
+
+    match run_choice.as_str() {
+        "Next Episode" => {
+            handle_servers(
+                config.clone(),
+                settings.clone(),
+                Some(true),
+                (
+                    media_info.0,
+                    media_info.1.as_str(),
+                    media_info.2.as_str(),
+                    media_info.3.as_str(),
+                    media_info.4.as_str(),
+                ),
+                episode_info,
+            )
+            .await?;
+        }
+        "Previous Episode" => {
+            handle_servers(
+                config.clone(),
+                settings.clone(),
+                Some(false),
+                (
+                    media_info.0,
+                    media_info.1.as_str(),
+                    media_info.2.as_str(),
+                    media_info.3.as_str(),
+                    media_info.4.as_str(),
+                ),
+                episode_info,
+            )
+            .await?;
+        }
+        "Search" => {
+            run(Arc::new(Args::default()), Arc::clone(&config)).await?;
+        }
+        "Replay" => {
+            handle_stream(
+                settings.clone(),
+                config.clone(),
+                player,
+                download_dir,
+                player_url,
+                media_info,
+                episode_info,
+                subtitles,
+                subtitle_language,
+            )
+            .await?;
+        }
+        "Exit" => {
+            std::process::exit(0);
+        }
+        _ => {
+            unreachable!("You shouldn't be here...")
+        }
     }
 
     Ok(())

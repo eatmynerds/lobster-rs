@@ -1,17 +1,24 @@
 use crate::flixhq::flixhq::FlixHQEpisode;
-use crate::CLIENT;
 use anyhow::anyhow;
+use reqwest::Client;
 use std::fs::OpenOptions;
 use std::io::prelude::*;
 
 pub async fn save_progress(url: String) -> anyhow::Result<(String, f32)> {
-    let watchlater_dir = std::path::PathBuf::new().join("/tmp/lobster-rs/watchlater");
+    let watchlater_dir = std::path::PathBuf::new().join(format!(
+        "{}/lobster-rs/watchlater",
+        std::env::temp_dir().display()
+    ));
 
     let mut durations: Vec<f32> = vec![];
 
     let re = regex::Regex::new(r#"#EXTINF:([0-9]*\.?[0-9]+),"#).unwrap();
 
-    let response = CLIENT.get(url).send().await?.text().await?;
+    let client = Client::builder()
+        .danger_accept_invalid_certs(true)
+        .build()?;
+    
+    let response = client.get(url).send().await?.text().await?;
 
     for capture in re.captures_iter(&response) {
         if let Some(duration) = capture.get(1) {
@@ -107,21 +114,21 @@ fn remove_from_history(media_id: String) -> anyhow::Result<()> {
 }
 
 pub async fn save_history(
-    media_info: (String, String, String, String),
+    media_info: (Option<String>, String, String, String, String),
     episode_info: Option<(usize, usize, Vec<Vec<FlixHQEpisode>>)>,
     position: String,
     progress: f32,
 ) -> anyhow::Result<()> {
-    let media_type = media_info.1.split('/').collect::<Vec<&str>>()[0];
+    let media_type = media_info.2.split('/').collect::<Vec<&str>>()[0];
 
     match media_type {
         "movie" => {
             if progress > 90.0 {
-                if remove_from_history(media_info.0.clone()).is_ok() {
+                if remove_from_history(media_info.2.clone()).is_ok() {
                 } else {
                     write_to_history(format!(
                         "{}\t{}\t{}\t{}",
-                        media_info.2, position, media_info.1, media_info.3
+                        media_info.3, position, media_info.2, media_info.4
                     ))?;
                 }
 
@@ -130,7 +137,7 @@ pub async fn save_history(
 
             write_to_history(format!(
                 "{}\t{}\t{}\t{}",
-                media_info.2, position, media_info.1, media_info.3
+                media_info.3, position, media_info.2, media_info.4
             ))?;
         }
         "tv" => {
@@ -145,17 +152,17 @@ pub async fn save_history(
                         }
                     }
 
-                    if remove_from_history(media_info.0.clone()).is_ok() {
+                    if remove_from_history(media_info.2.clone()).is_ok() {
                     } else {
                         write_to_history(format!(
                             "{}\t{}\t{}\t{}\t{}\t{}\t{}",
-                            media_info.2,
+                            media_info.3,
                             position,
+                            media_info.2,
                             media_info.1,
-                            media_info.0,
                             season_number,
                             episodes[season_number - 1][episode_number].title,
-                            media_info.3
+                            media_info.4
                         ))?;
                     }
 
@@ -164,13 +171,13 @@ pub async fn save_history(
 
                 write_to_history(format!(
                     "{}\t{}\t{}\t{}\t{}\t{}\t{}",
-                    media_info.2,
+                    media_info.3,
                     position,
+                    media_info.2,
                     media_info.1,
-                    media_info.0,
                     season_number,
                     episodes[season_number - 1][episode_number].title,
-                    media_info.3
+                    media_info.4
                 ))?;
             }
         }

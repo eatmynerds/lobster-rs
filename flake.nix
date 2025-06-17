@@ -1,25 +1,27 @@
 {
-  description = "A CLI tool to watch movies and TV shows";
-
   inputs = {
-    nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+    utils.url = "github:numtide/flake-utils";
   };
 
-  outputs = { self, nixpkgs }:
-    let
-      supportedSystems = [ "x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin" ];
-      eachSystem = nixpkgs.lib.genAttrs supportedSystems;
-      pkgsFor = eachSystem (system:
-        import nixpkgs {
-          config = { };
-          localSystem = system;
-          overlays = [ ];
-        });
-    in
-    {
-      packages = eachSystem (system: {
-        lobster-rs = pkgsFor.${system}.callPackage ./default.nix { };
-        default = self.packages.${system}.lobster-rs;
-      });
+  outputs = { self, nixpkgs, utils, ... }: {
+    overlays.default = final: prev: {
+      lobster-rs = final.callPackage ./default.nix {};
     };
+  } //
+    utils.lib.eachDefaultSystem (system:
+      let
+        pkgs = import nixpkgs { inherit system; overlays = [self.overlays.default]; };
+      in
+      {
+        packages = {
+          inherit (pkgs) lobster-rs;
+          default = pkgs.lobster-rs;
+        };
+        devShell = with pkgs; mkShell {
+          name = "lobster-rs";
+          nativeBuildInputs = [ cargo rustc clippy rustfmt openssl mpv fzf pkg-config ];
+        };
+      }
+    );
 }
