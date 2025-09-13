@@ -1,11 +1,10 @@
-use crate::{providers::VideoExtractor, BASE_URL, CLIENT};
+use crate::{providers::VideoExtractor, CLIENT};
 use log::{debug, error};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Source {
     pub file: String,
-    pub r#type: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -21,8 +20,6 @@ pub struct Track {
 pub struct VidCloud {
     pub sources: Vec<Source>,
     pub tracks: Vec<Track>,
-    pub t: u32,
-    pub server: u32,
 }
 
 impl VidCloud {
@@ -31,18 +28,13 @@ impl VidCloud {
         Self {
             sources: vec![],
             tracks: vec![],
-            t: 0,
-            server: 0,
         }
     }
 }
 
 impl VideoExtractor for VidCloud {
     async fn extract(&mut self, server_url: &str) -> anyhow::Result<()> {
-        let request_url = format!(
-            "https://decryptapi.broggl.farm/embed?embed_url={}&referrer={}",
-            server_url, BASE_URL
-        );
+        let request_url = format!("https://dec.eatmynerds.live?url={}", server_url);
 
         debug!("Starting extraction process for URL: {}", server_url);
         debug!("Constructed request URL: {}", request_url);
@@ -68,8 +60,6 @@ impl VideoExtractor for VidCloud {
             Ok(sources) => {
                 self.sources = sources.sources;
                 self.tracks = sources.tracks;
-                self.t = sources.t;
-                self.server = sources.server;
                 debug!("Successfully deserialized response into VidCloud.");
             }
             Err(e) => {
