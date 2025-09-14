@@ -45,7 +45,8 @@ Before you run the installer you'll need the following for it to work:
 #### Linux 
 
 ```sh
-curl -sL https://github.com/eatmynerds/lobster-rs/raw/master/install -o install && \
+curl -sL "https://raw.githubusercontent.com/eatmynerds/lobster-rs/master/install" -o install
+ -o install && \
 chmod +x install && \
 ./install && \
 sudo mv lobster-rs /usr/local/bin/lobster-rs && \
@@ -479,3 +480,4 @@ rm "$(brew --prefix)"/bin/lobster-rs
 ```sh
 rm /usr/bin/lobster-rs
 ```
+
