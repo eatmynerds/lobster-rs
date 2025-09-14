@@ -1,20 +1,17 @@
-#!/bin/bash
-set -euo pipefail
+#!/bin/sh
+set -eu
 
-# Required dependencies
-DEPS=(curl jq unzip)
+DEPS="curl jq unzip"
 
-# Check dependencies
-for dep in "${DEPS[@]}"; do
-    if ! command -v "$dep" &>/dev/null; then
+for dep in $DEPS; do
+    if ! command -v "$dep" >/dev/null 2>&1; then
         echo "Error: '$dep' is required but not installed." >&2
         exit 1
     fi
 done
 
-# Optional dependency for Android support
-if [[ "${1:-}" == "--android" ]]; then
-    if ! command -v adb &>/dev/null; then
+if [ "${1:-}" = "--android" ]; then
+    if ! command -v adb >/dev/null 2>&1; then
         echo "Warning: '--android' specified but 'adb' not found. Android install may fail." >&2
     fi
 fi
@@ -25,51 +22,57 @@ TEMP_DIR="./temp-lobster"
 ARCH=$(uname -m)
 OS=$(uname -s | tr '[:upper:]' '[:lower:]')
 
-# Exit early for unsupported architectures
-if [[ "$ARCH" =~ ^(i[3-6]86)$ ]]; then
-    echo "Error: 32-bit x86 architectures are not supported. Compile from source instead."
+case "$ARCH" in
+    i386|i486|i586|i686)
+        echo "Error: 32-bit x86 architectures are not supported. Compile from source instead."
+        exit 1
+        ;;
+esac
+
+rm -rf "$TEMP_DIR"
+mkdir -p "$TEMP_DIR"
+
+DOWNLOAD_URL=$(curl -sSL -H "User-Agent: $USER_AGENT" "$API_URL" | jq -r '.assets[0].browser_download_url')
+if [ -z "$DOWNLOAD_URL" ] || [ "$DOWNLOAD_URL" = "null" ]; then
+    echo "Error: No download URL found."
     exit 1
 fi
 
-# Cleanup and prepare temp directory
-rm -rf "$TEMP_DIR" && mkdir -p "$TEMP_DIR"
-
-# Fetch release information
-DOWNLOAD_URL=$(curl -sSL -H "User-Agent: $USER_AGENT" "$API_URL" | jq -r '.assets[0].browser_download_url')
-[[ -z "$DOWNLOAD_URL" ]] && { echo "Error: No download URL found."; exit 1; }
-
-# Download and extract
 curl -sSL "$DOWNLOAD_URL" -o "$TEMP_DIR/asset.zip"
 unzip -q "$TEMP_DIR/asset.zip" -d "$TEMP_DIR"
 
-# Detect Android via ADB or system properties
-if command -v getprop &>/dev/null; then OS="android"; fi
-if [[ "${1:-}" == "--android" && -n "$(command -v adb)" ]]; then OS="android"; ARCH=$(adb shell uname -m); fi
-
-# Determine build target
-case "$OS" in
-    *linux*)   BUILD_TARGET="${ARCH}-unknown-linux-gnu_lobster-rs";;
-    *darwin*)  BUILD_TARGET="${ARCH}-apple-darwin_lobster-rs";;
-    *android*) BUILD_TARGET="${ARCH}-linux-android_lobster-rs";;
-    *msys*|*cygwin*|*mingw*|*windows*) BUILD_TARGET="${ARCH}-pc-windows-msvc_lobster-rs.exe";;
-    *) echo "Error: Unsupported platform $OS-$ARCH"; exit 1;;
-esac
-
-# Locate binary
-FOUND_FILE=$(find "$TEMP_DIR" -type f -name "$BUILD_TARGET")
-[[ -z "$FOUND_FILE" ]] && { echo "Error: Build target not found."; exit 1; }
-
-# Determine output filename based on platform
-if [[ "$OS" =~ msys|cygwin|mingw|windows ]]; then
-    DEST_PATH="./lobster-rs.exe"
-else
-    DEST_PATH="./lobster-rs"
+if command -v getprop >/dev/null 2>&1; then
+    OS="android"
+fi
+if [ "${1:-}" = "--android" ] && command -v adb >/dev/null 2>&1; then
+    OS="android"
+    ARCH=$(adb shell uname -m)
 fi
 
-# Move binary to destination
-mv "$FOUND_FILE" "$DEST_PATH" && chmod +x "$DEST_PATH"
+case "$OS" in
+    *linux*)   BUILD_TARGET="${ARCH}-unknown-linux-gnu_lobster-rs" ;;
+    *darwin*)  BUILD_TARGET="${ARCH}-apple-darwin_lobster-rs" ;;
+    *android*) BUILD_TARGET="${ARCH}-linux-android_lobster-rs" ;;
+    *msys*|*cygwin*|*mingw*|*windows*) BUILD_TARGET="${ARCH}-pc-windows-msvc_lobster-rs.exe" ;;
+    *)
+        echo "Error: Unsupported platform $OS-$ARCH"
+        exit 1
+        ;;
+esac
 
-# Cleanup and finish
+FOUND_FILE=$(find "$TEMP_DIR" -type f -name "$BUILD_TARGET" 2>/dev/null || true)
+if [ -z "$FOUND_FILE" ]; then
+    echo "Error: Build target not found."
+    exit 1
+fi
+
+case "$OS" in
+    *msys*|*cygwin*|*mingw*|*windows*) DEST_PATH="./lobster-rs.exe" ;;
+    *) DEST_PATH="./lobster-rs" ;;
+esac
+
+mv "$FOUND_FILE" "$DEST_PATH"
+chmod +x "$DEST_PATH"
+
 rm -rf "$TEMP_DIR"
 echo "Done! Binary saved to $DEST_PATH."
-
